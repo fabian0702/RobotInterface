@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+// Protobuf definition of a Robot Model
+// Copyright (C) 2018, BFH roboticsLab
+// All rights reserved
+
+package ch.bfh.roboticsLab.robot.control;
+
+option java_package = "ch.bfh.roboticsLab.robot.control";
+option java_outer_classname = "RobotModel";
+
+// Note: These definitions are used to facilitate object serialization
+// and not necessarily for communication.
+
+/** This message contains the complete robot model. */
+message Model {
+    
+    /** Name of the robot this model applies to. */
+    string name = 1;
+    /** Enable or disable the robot freedrive (hand-guiding) mode. */
+    bool freedrive = 2;
+    /** Robot joint axes. */
+    repeated Joint joints = 3;
+    /** Cartesian properties */
+    repeated Cartesian cartesian = 4;
+    /** Array of digital output channel names */
+    repeated string digitalOutputs = 5;
+
+    /** Properties to control robot from GUI. */
+    message GuiProperties {
+
+        /** Display physical units (e.g. degrees, radians or meters). */
+        string unit = 1;
+        /** Gain: converts between the display physical units and the robot controller's units (e.g. degrees to radians). */
+        double gain = 2;
+        /** The size of one GUI step command in the display physical units (e.g. 1 degree). */
+        double step = 3;
+	    /** Format string for display (e.g. "%5.4f" for floating point number with 4 decimal places) */
+    	string format = 5;
+    }
+    
+    /** A joint description message. */
+    message Joint {
+    
+        /** Joint types. */
+        enum Type {
+            UNKNOWN = 0;
+            /** Revolute joint. */
+            REVOLUTE = 1;
+            /** Prismatic joint. */
+            PRISMATIC = 2;
+        }
+        /** Joint type. */
+        Type type = 1;
+        /** Joint control properties. */
+        GuiProperties properties = 2;
+    }
+
+    /** Cartesian control properties. */
+    message Cartesian {
+        /** Cartesian control properties. */
+        GuiProperties properties = 1;
+    
+        enum Axis {
+            UNKOWN = 0;
+            X = 1;
+            Y = 2;
+            Z = 3;
+            RX = 4;
+            RY = 5;
+            RZ = 6;
+        }
+        /** Cartesian axis. */
+        Axis axis = 2;
+        string name = 3;
+    }
+}

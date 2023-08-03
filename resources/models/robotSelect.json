@@ -1,0 +1,38 @@
+[
+    {
+        "ID": "RS-20",
+        "file": "robotModel-RS20.json"
+    },
+    {
+        "ID": "Meca-500",
+        "file": "robotModel-Meca.json"
+    },
+    {
+        "ID": "TX-40",
+        "file": "robotModel-TX40.json"
+    },
+    {
+        "ID": "UR3",
+        "file": "robotModel-UR3.json"
+    },
+    {
+        "ID": "KUKA-LBR-IIWA",
+        "file": "robotModel-iiwa.json"
+    },
+    {
+        "ID": "Panda",
+        "file": "robotModel-Panda.json"
+    },
+    {
+        "ID": "Power-Delta",
+        "file": "robotModel-PowerDelta.json"
+    },
+    {
+        "ID": "SR-3iA",
+        "file": "robotModel-SR3iA.json"
+    },
+    {
+        "ID": "Gen3",
+        "file": "robotModel-Gen3.json"
+    }
+]

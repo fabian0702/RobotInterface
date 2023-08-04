@@ -310,6 +310,7 @@ def renderRobot(robot:robotDescription):
                 AllChartsBtn = toggleButton('', icon='done_all', tooltip='Displays a chart with all joints and axies')
                 SimulationBtn = toggleButton('', icon='view_in_ar', tooltip='Hides the 3D simulation', on_change=robotSim.changeVisibility)
                 SimulationBtn.handlePress(state=True, suppress=True)
+                
     with ui.column():
         jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
         XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount:robotModel.axisCount+robotModel.rotationAxisCount])

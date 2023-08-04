@@ -1,4 +1,5 @@
 import time
+from typing import Any
 from nicegui import ui, app
 from nicegui.elements.scene_object3d import Object3D
 import numpy as np
@@ -7,6 +8,7 @@ plt.switch_backend('agg')
 from sys import path
 import os
 path.append('./Python-main/')
+path.append('./resources/environment/')
 from ch.bfh.roboticsLab.robot.RobotClient import RobotClient
 from ch.bfh.roboticsLab import Base_pb2 as pbBase
 from ch.bfh.roboticsLab.robot import RobotControl_pb2 as pbRobotControl
@@ -16,6 +18,7 @@ import rowan
 import math
 import json
 from fastapi.responses import RedirectResponse
+import environment
 
 logger = Logger('robotUI').getInstance()
 
@@ -30,7 +33,49 @@ chartsLogTime = 30
 chartUpdateInterval = 0.2
 
 JSONPath = './resources/models/'
-visibleCharts = 0
+EnvironmentPath = './resources/environment/'
+
+def rgb_to_hsv(r, g, b):
+    maxc = max(r, g, b)
+    minc = min(r, g, b)
+    rangec = (maxc-minc)
+    v = maxc
+    if minc == maxc:
+        return 0.0, 0.0, v
+    s = rangec / maxc
+    rc = (maxc-r) / rangec
+    gc = (maxc-g) / rangec
+    bc = (maxc-b) / rangec
+    if r == maxc:
+        h = bc-gc
+    elif g == maxc:
+        h = 2.0+rc-bc
+    else:
+        h = 4.0+gc-rc
+    h = (h/6.0) % 1.0
+    return h, s, v
+
+def hsv_to_rgb(h, s, v):
+    if s == 0.0:
+        return v, v, v
+    i = int(h*6.0) # XXX assume int() truncates!
+    f = (h*6.0) - i
+    p = v*(1.0 - s)
+    q = v*(1.0 - s*f)
+    t = v*(1.0 - s*(1.0-f))
+    i = i%6
+    if i == 0:
+        return v, t, p
+    if i == 1:
+        return q, v, p
+    if i == 2:
+        return p, v, t
+    if i == 3:
+        return p, q, v
+    if i == 4:
+        return t, p, v
+    if i == 5:
+        return v, p, q
 
 class axisData:
     def __init__(self, name:str, dataX:np.ndarray, dataY:np.ndarray) -> None:
@@ -58,28 +103,18 @@ class chart:
         self.plot:ui.line_plot = ui.line_plot(n=len(self.graphNames), figsize=(6, 2)).with_legend(self.graphNames, loc='upper right')
         self.plot.fig.gca().set_xticklabels([])
     
-    def addData(self, data:axisData):
-        self.data.append(data)
-        self.chart.refresh()
-    def setData(self, data:axisData):
-        self.data = data
-        self.chart.refresh()
     def updateData(self,):
         if self.plot.visible and len(self.graphNames) > 0:
             data = [[val] for val in self.gains * np.concatenate((robotServer.jointsValue, robotServer.Cartesian))][self.startIndex:]      # Optimise Line
             self.plot.push([robotServer.currentTime], data)
 
     def changeVisibility(self, visible:bool):
-        global visibleCharts
         if visible:
             self.startTime = time.time()
             self.chartUpdateTimer.activate()
             self.plot.clear()
-            visibleCharts += 1
         else:
-            visibleCharts -= 1
             self.chartUpdateTimer.deactivate()
-        visibleCharts = max(visibleCharts, 0)
         self.plot.set_visibility(visible)
 
 class toggleButton:
@@ -209,7 +244,7 @@ class robotDescription:
 freedriveChangeBtn = None
 @ui.refreshable
 def renderRobot(robot:robotDescription):
-    global freedriveChangeBtn
+    global freedriveChangeBtn, gripperChangeBtn
     ui.html('''<style>input[type=number]{-moz-appearance: textfield;color:white;text-align: center;}input::-webkit-outer-spin-button,input::-webkit-inner-spin-button {-webkit-appearance: none;margin: 0;}</style>''')
     with ui.left_drawer().classes('filter-none bg-slate-400 text-center items-center items-stretch py-0').props(f':width="{max(robotModel.axisCount - 1, 4)}80"'):
         with ui.row():
@@ -230,14 +265,14 @@ def renderRobot(robot:robotDescription):
                 def changePrecision(pressed):
                     global precision
                     precision = pressed
-                precisionbtn = toggleButton('', icon='biotech', on_change=changePrecision, tooltip='Puts the interface in precision mode where the robot only moves 1/10th the usual distance')
-                changeGripperBTN = toggleButton('', icon='precision_manufacturing', on_change=robotServer.changeGripperState, tooltip='Changes the state of the gripper')
+                toggleButton('', icon='biotech', on_change=changePrecision, tooltip='Puts the interface in precision mode where the robot only moves 1/10th the usual distance')
+                gripperChangeBtn = toggleButton('', icon='precision_manufacturing', on_change=robotServer.changeGripperState, tooltip='Changes the state of the gripper')
                 with ui.dialog() as speedChangeDialog, ui.card().style('width:25%'):
                     ui.label('Change speed:').classes('text-2xl')
                     ui.slider(min=0, max=1, step=0.01, value=speed, on_change=lambda e: speedLabel.set_text(f'Speed: {speed*100:.1f}%')).bind_value(globals(), 'speed')
                     speedLabel = ui.label(f'Speed: {speed*100:.1f}%').classes('mt-[-1em]')
                     ui.button('Close', on_click=speedChangeDialog.close)
-                speedChangebtn = ui.button('', icon='speed', on_click=speedChangeDialog.open).tooltip("Opens a dialog to set the robot's speed").classes('px-5 m-[-0.2em] text-white')
+                ui.button('', icon='speed', on_click=speedChangeDialog.open).tooltip("Opens a dialog to set the robot's speed").classes('px-5 m-[-0.2em] text-white')
 
                 if robotModel.isCompliant:
                     freedriveChangeBtn = toggleButton('', icon='pan_tool', on_change=robotServer.changeFreedrive, tooltip='Puts the robot into freedrive')
@@ -277,13 +312,8 @@ def renderRobot(robot:robotDescription):
                 SimulationBtn.handlePress(state=True, suppress=True)
     with ui.column():
         jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
-        #robotServer.registerUpdateCallback(jChart.updateData)
-
         XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount:robotModel.axisCount+robotModel.rotationAxisCount])
-        #robotServer.registerUpdateCallback(XChart.updateData)
-        
         RChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount+robotModel.rotationAxisCount:])
-        #robotServer.registerUpdateCallback(RChart.updateData)
         
     def allChartsVisible(visible):
         jChartBtn.handlePress(visible)
@@ -296,30 +326,57 @@ def renderRobot(robot:robotDescription):
 
 class Simulation:
     def __init__(self) -> None:
+        app.add_static_files('/static/environment/', './resources/environment/')
+        self.environment:list[Object3D] = []
+        self.environmentData:dict = {}
+        self.grippedObjects:list[Object3D] = []
+        self.grippedObjectProperties:list[Object3D] = []
+        self.color:list[list[str]] = [[]]
+        self.highlightedObjects:list[Object3D] = []
+        self.staticObjects:list[Object3D] = []
+        self.highlightColor = '#0088ff'
+        self.gripThreshold = 0.004
         self.renderSimulation()
-        self.updateSimulationTimer = ui.timer(0.1, callback=self.update, active=True)        
+        self.updateSimulationTimer = ui.timer(0.1, callback=self.update, active=True)  
+
+    def forwardKin(self):
+        rotations = robotServer.jointsValue
+        matrix = TransformationMatix.compose(np.array([0.0, 0.0, 0.0]), rowan.from_euler(0.0, 0.0, 0.0, 'zyx'))
+        last_offset = np.array([0.0, 0.0, 0.0])
+        for offset, jointmatrix, rotation in zip(robotModel.offsets, robotModel.jointLookupMatrix, rotations):
+            matrix = matrix * TransformationMatix.compose(np.array(offset) - last_offset, rowan.from_euler(*jointmatrix[::-1] * rotation, 'zyx'))
+            last_offset = np.array(offset)
+        position, rotation = matrix.decomposeNumpy()
+        return position
 
     def changeVisibility(self, visible:bool):
         self.simulationDrawer.set_visibility(visible)
-    
+        
     @ui.refreshable
     def renderSimulation(self):
         if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel:
             return
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
-            with ui.scene(width=700, height=950).classes('m-[-1em]') as scene, scene.group() as group:
+            with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene, self.scene.group() as group:
+                group.rotate(0,0,0.685)
+
+                environment.initialize(self, self.scene)
+
                 lastOffset = [0.0, 0.0, 0.0]
                 self.links:list[ui.scene.group] = []
                 group.scale(-3.5)
                 for i, file in enumerate(robotModel.files):
-                    scene.stack.append(scene.group())              
-                    scene.stack[-1].move(*(-np.array(robotModel.offsets[i]) + np.array(lastOffset)))
+                    self.scene.stack.append(self.scene.group())              
+                    self.scene.stack[-1].move(*(-np.array(robotModel.offsets[i]) + np.array(lastOffset)))
                     lastOffset = robotModel.offsets[i]
-                    self.links.append(scene.group())  
-                    scene.stack.append(self.links[-1])   
-                    scene.gltf(f'/static/{robotModel.id}/'+file, scale=0.001, offset=robotModel.offsets[i])
+                    self.links.append(self.scene.group())  
+                    self.scene.stack.append(self.links[-1])   
+                    self.scene.gltf(f'/static/{robotModel.id}/'+file, scale=0.001, offset=robotModel.offsets[i])
+                
+                with self.scene.group() as self.environmentGroupMoving:
+                    environment.initializeGripper(self, self.scene)
                 for _ in range(len(robotModel.files)*2):
-                    scene.stack.pop()
+                    self.scene.stack.pop()
 
     def update(self):
         if robotServer.jointsValue is None:
@@ -331,6 +388,29 @@ class Simulation:
                 link.rotate(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i] + robotModel.globalSimulationRotation[i]))
             else:
                 link.move(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i] + robotModel.globalSimulationRotation[i]))
+        environment.update(self, self.environmentGroupStatic, robotServer)
+        if robotServer.gripper > 0.5:                
+            for property, obj in zip(self.grippedObjectProperties, self.grippedObjects):
+                obj.move(robotServer.Cartesian[0]+property[0][0]-property[2][0], robotServer.Cartesian[1]+property[0][1]-property[2][1], -robotServer.Cartesian[2]+property[0][2]+property[2][2])
+                matRot = Object3D.rotation_matrix_from_euler((robotServer.Cartesian[3] - property[2][3]), (robotServer.Cartesian[4] - property[2][4]), (robotServer.Cartesian[5] - property[2][5]))
+                matNew = np.matmul(np.array(matRot), np.array(property[1]))
+                obj.R = list(map(list, matNew))
+                obj._rotate()
+        for i, obj, clone in zip(range(len(self.environment)), self.environment, self.highlightedObjects):
+            print(sum([(obj.x-robotServer.Cartesian[0])**2, (obj.y-robotServer.Cartesian[1])**2, (obj.z+robotServer.Cartesian[2])**2])**0.5)
+            if sum([(obj.x-robotServer.Cartesian[0])**2, (obj.y-robotServer.Cartesian[1])**2, (obj.z+robotServer.Cartesian[2])**2]) < self.gripThreshold:
+                if robotServer.gripper > 0.5:
+                    if len(self.grippedObjects) == 0:
+                        self.grippedObjects.append(obj)
+                        self.grippedObjectProperties.append([[obj.x, obj.y, obj.z], obj.R, robotServer.Cartesian])
+                clone.move(obj.x, obj.y, obj.z)
+                clone.scale(obj.sx, obj.sy, obj.sz)
+                clone.rotate_R(obj.R)
+                clone.visible(True)
+            else:
+                self.grippedObjects = []
+                self.grippedObjectProperties = []
+                clone.visible(False)
 
 class Robot:
     def __init__(self) -> None:
@@ -338,11 +418,12 @@ class Robot:
         self.robotPose = None
         self.moving = None
         self.freeDrive = False
+        self.gripper = 0.0
         self.initializedAxis = False
         self.currentTime = 0.0
         self.Cartesian = None
         self.wrongRobot = False
-        self.client = RobotClient('192.168.0.100', self.myProcessSubscription)
+        self.client = RobotClient('localhost', self.myProcessSubscription)
         self.max_speed = pbBase.LinearAngularPair(linear = robotModel.maxLinearSpeed, angular=robotModel.maxAngualarSpeed)
         self.max_tolerance = pbBase.LinearAngularPair(linear = robotModel.maxLinearTolerance, angular=robotModel.maxAngularTolerance)
         self.callbacks = []
@@ -378,7 +459,6 @@ class Robot:
             actualJoints = np.array(robotServer.jointsValue)
             logger.info(actualJoints)
             newJoints = actualJoints + np.array(pose)
-            # print(speed)
             robotServer.client.moveJoints(jointsOrPose=pbBase.ArrayDouble(value=list(newJoints)),override=speed)
     def moveCartesian(self, pose:list[int]):
         if self.robotPose is not None:
@@ -393,36 +473,38 @@ class Robot:
         self.callbacks.append(callback)
     def myProcessSubscription(self, message):
         global freedriveChangeBtn
-        #try:
-        self.published = message
-        self.jointsValue = np.array(message.jointValues.value) if message.HasField("jointValues") else self.jointsValue
-        self.robotPose = message.robotPose if message.HasField("robotPose") else self.robotPose
-        self.moving = message.state.moving if message.HasField("state") else self.moving
-        freeDriveAct = message.freedrive.state if message.HasField("freedrive") else False
-        if self.robotPose is None or self.jointsValue is None or self.moving is None:
-            return
-        if not len(self.jointsValue) == robotModel.axisCount:
-            if self.wrongRobot:
+        try:
+            self.published = message
+            self.jointsValue = np.array(message.jointValues.value) if message.HasField("jointValues") else self.jointsValue
+            self.robotPose = message.robotPose if message.HasField("robotPose") else self.robotPose
+            self.moving = message.state.moving if message.HasField("state") else self.moving
+            freeDriveAct = message.freedrive.state if message.HasField("freedrive") else False
+            gripperAct = message.gripper.position if message.HasField("gripper") else 0.0
+            if self.robotPose is None or self.jointsValue is None or self.moving is None:
                 return
-            self.wrongRobot = True
-            wrongRobotSelected()
+            if not len(self.jointsValue) == robotModel.axisCount:
+                if self.wrongRobot:
+                    return
+                self.wrongRobot = True
+                wrongRobotSelected()
+            if message.HasField("freedrive") and (not self.freeDrive == freeDriveAct) and (not freedriveChangeBtn is None):
+                self.freeDrive = freeDriveAct
+                freedriveChangeBtn.handlePress(state=freeDriveAct, suppress=True)
+            if message.HasField("gripper") and (not (abs(self.gripper - gripperAct) < 0.01)) and (not gripperChangeBtn is None):
+                self.gripper = gripperAct
+                gripperChangeBtn.handlePress(state=gripperAct>0.5, suppress=True)
+            if not self.initializedAxis and message.HasField("robotPose") and message.HasField("jointValues"):
+                self.initializedAxis = True
+                renderRobot.refresh()
+            newPosition, newOrientation = TransformationMatix.fromPose(self.robotPose).decomposeNumpy()
+            newEuler = rowan.to_euler(newOrientation)
+            self.Cartesian = np.concatenate((newPosition, newEuler[::-1]))
+            self.currentTime = time.time()
 
-        if message.HasField("freedrive") and (not self.freeDrive == freeDriveAct) and (not freedriveChangeBtn is None):
-            #print(self.freeDrive)
-            self.freeDrive = freeDriveAct
-            freedriveChangeBtn.handlePress(state=freeDriveAct, suppress=True)
-        if not self.initializedAxis and message.HasField("robotPose") and message.HasField("jointValues"):
-            self.initializedAxis = True
-            renderRobot.refresh()
-        newPosition, newOrientation = TransformationMatix.fromPose(self.robotPose).decomposeNumpy()
-        newEuler = rowan.to_euler(newOrientation)
-        self.Cartesian = np.concatenate((newPosition, newEuler[::-1]))
-        self.currentTime = time.time()
-
-        for callback in self.callbacks:
-            callback()
-        #except Exception as e:
-        #    print(e)
+            for callback in self.callbacks:
+                callback()
+        except Exception as e:
+            logger.error(e)
 
     def shutdown(self):
         self.client.shutdown()

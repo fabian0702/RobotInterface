@@ -1,8 +1,10 @@
 {
     "python.autoComplete.extraPaths": [
-        "Python-main/"
+        "Python-main/",
+        "resources/environment/"
     ],
     "python.analysis.extraPaths": [
-        "Python-main/"
+        "Python-main/",
+        "resources/environment/"
     ]
 }

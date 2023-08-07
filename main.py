@@ -26,7 +26,7 @@ class direction:
     up = 1
     down = -1
 
-clientAdress = '192.168.0.100'  # The address of the grpc server
+clientAdress = 'localhost'  # The address of the grpc server
 
 precision = False               # if in precision mode or not
 speed = 0.1                     # global speed

@@ -1,91 +1,44 @@
 import time
-from typing import Any
+import rowan
+import math
+import json
+from fastapi.responses import RedirectResponse
 from nicegui import ui, app
 from nicegui.elements.scene_object3d import Object3D
 import numpy as np
 from matplotlib import pyplot as plt
-plt.switch_backend('agg')
+plt.switch_backend('agg')               # change backend to optimise charts
 from sys import path
 import os
-path.append('./Python-main/')
+path.append('./Python-main/')           # Additional Paths for the BFH Module and the environments script
 path.append('./resources/environment/')
 from ch.bfh.roboticsLab.robot.RobotClient import RobotClient
 from ch.bfh.roboticsLab import Base_pb2 as pbBase
 from ch.bfh.roboticsLab.robot import RobotControl_pb2 as pbRobotControl
 from ch.bfh.roboticsLab.util.Logger import Logger
 from ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatix
-import rowan
-import math
-import json
-from fastapi.responses import RedirectResponse
-import environment, matplotlib
+import environment
 
-logger = Logger('robotUI').getInstance()
+logger = Logger('robotUI').getInstance()        # Setup Logger
 
-class direction:
+class direction: 
+    """Data class to store direction"""   
     up = 1
     down = -1
 
-clientAdress = '192.168.0.100'
+clientAdress = '192.168.0.100'  # The address of the grpc server
 
-precision = False
-speed = 0.1
+precision = False               # if in precision mode or not
+speed = 0.1                     # global speed
 
-chartsLogTime = 30
-chartUpdateInterval = 0.4
+chartsLogTime = 30              # Total timespan on chart
+chartUpdateInterval = 0.4       # Interval between data refreshs
 
-JSONPath = './resources/models/'
-EnvironmentPath = './resources/environment/'
-
-#def rgb_to_hsv(r, g, b):
-#    maxc = max(r, g, b)
-#    minc = min(r, g, b)
-#    rangec = (maxc-minc)
-#    v = maxc
-#    if minc == maxc:
-#        return 0.0, 0.0, v
-#    s = rangec / maxc
-#    rc = (maxc-r) / rangec
-#    gc = (maxc-g) / rangec
-#    bc = (maxc-b) / rangec
-#    if r == maxc:
-#        h = bc-gc
-#    elif g == maxc:
-#        h = 2.0+rc-bc
-#    else:
-#        h = 4.0+gc-rc
-#    h = (h/6.0) % 1.0
-#    return h, s, v
-#
-#def hsv_to_rgb(h, s, v):
-#    if s == 0.0:
-#        return v, v, v
-#    i = int(h*6.0) # XXX assume int() truncates!
-#    f = (h*6.0) - i
-#    p = v*(1.0 - s)
-#    q = v*(1.0 - s*f)
-#    t = v*(1.0 - s*(1.0-f))
-#    i = i%6
-#    if i == 0:
-#        return v, t, p
-#    if i == 1:
-#        return q, v, p
-#    if i == 2:
-#        return p, v, t
-#    if i == 3:
-#        return p, q, v
-#    if i == 4:
-#        return t, p, v
-#    if i == 5:
-#        return v, p, q
-
-class axisData:
-    def __init__(self, name:str, dataX:np.ndarray, dataY:np.ndarray) -> None:
-        self.name = name
-        self.dataX = dataX
-        self.dataY = dataY
+JSONPath = './resources/models/'        # Path to where the configuration files for the robots are saved
+EnvironmentPath = './resources/environment/'        # Path to where the environments files are saved
 
 class chart:
+    """Class to render a chart for a configurable amount of axies"""
     # @param data A Dictionary with graphnames as keys a list of np.ndarray with the 0th element as the x axis and the 1st element as the y axis
     def __init__(self, title:str, xaxisName:str, yaxisName:str, graphNames:list[str], visible = False):
         self.title = title
@@ -97,7 +50,7 @@ class chart:
         self.xaxisName = xaxisName
         self.yaxisName = yaxisName
         self.chart()
-        self.plot.set_visibility(visible)
+        self.plot.set_visibility(visible)       # Hide chart per default
         self.startTime = time.time()
         self.gains = np.array([gain if robotModel.AxisNames[i] in self.graphNames else 0.0 for i, gain in enumerate(robotModel.AxisGain)])
         self.startIndex = min(map(robotModel.getAxisIndex, self.graphNames))
@@ -105,30 +58,34 @@ class chart:
         
     @ui.refreshable
     def chart(self):
-        self.chartUpdateTimer = ui.timer(chartUpdateInterval, self.updateData, active=False)
-        self.plot:ui.line_plot = ui.line_plot(n=len(self.graphNames), limit=self.maxIndex-1, figsize=(6, 2)).with_legend(self.graphNames, loc='upper right')
+        """Function to render the chart"""
+        self.chartUpdateTimer = ui.timer(chartUpdateInterval, self.updateData, active=False)        # setup refresh timer
+        self.plot:ui.line_plot = ui.line_plot(n=len(self.graphNames), limit=self.maxIndex-1, figsize=(6, 2)).with_legend(self.graphNames, loc='upper right')        # plot
         #self.plot.fig.gca().set_xticklabels([])
-        plt.grid(axis = 'x')
+        plt.grid(axis = 'x')        # grid
     
     def updateData(self,):
-        if not robotServer.client is None and self.plot.visible and len(self.graphNames) > 0:
-            self.index = int((robotServer.currentTime - self.startTime) / chartUpdateInterval) % self.maxIndex
-            self.data[0][self.index] = (robotServer.currentTime - self.startTime) % chartsLogTime
+        """Function to update the data from the server, and display it on the chart"""
+        if not robotServer.client is None and self.plot.visible and len(self.graphNames) > 0:       # Sanity check
+            self.index = int((robotServer.currentTime - self.startTime) / chartUpdateInterval) % self.maxIndex      # Calculate index in ring buffer
+            self.data[0][self.index] = (robotServer.currentTime - self.startTime) % chartsLogTime                   # write time in ringbuffer
             for i, val in enumerate((self.gains * np.concatenate((robotServer.jointsValue, robotServer.Cartesian)))[self.startIndex:self.endIndex+1]):
-                self.data[i+1][self.index]=val
-            self.plot.push(self.data[0], self.data[1:])
+                self.data[i+1][self.index]=val      # write the values neccesary in the ring buffer
+            self.plot.push(self.data[0], self.data[1:])     # update the chart
 
     def changeVisibility(self, visible:bool):
+        """Function to change the visibility of the charts"""
         if visible:
-            self.startTime = time.time()
-            self.chartUpdateTimer.activate()
-            self.plot.clear()
-            self.data = [[i * chartUpdateInterval for i in range(self.maxIndex)]] + [[np.concatenate((robotServer.jointsValue, robotServer.Cartesian))[i +  self.startIndex] for n in range(self.maxIndex)] for i in range(len(self.graphNames))]
+            self.startTime = time.time()        # keep track of the start time
+            self.chartUpdateTimer.activate()    # activate the refresh timer
+            self.plot.clear()                   # reset the plot
+            self.data = [[i * chartUpdateInterval for i in range(self.maxIndex)]] + [[np.concatenate((robotServer.jointsValue, robotServer.Cartesian))[i +  self.startIndex] for n in range(self.maxIndex)] for i in range(len(self.graphNames))]       # prepare the data
         else:
-            self.chartUpdateTimer.deactivate()
-        self.plot.set_visibility(visible)
+            self.chartUpdateTimer.deactivate()      # deactivate refresh timer
+        self.plot.set_visibility(visible)           # hide / show chart
 
 class toggleButton:
+    """Togglebutton class"""
     def __init__(self, text:str, icon:str = None, disable=False, on_change=lambda a:None, tooltip:str=None):
         self.text = text
         self.color = 'rgb(15 23 42)'
@@ -143,11 +100,13 @@ class toggleButton:
 
     @ui.refreshable
     def toggle(self):
+        """Function to setup the toggle element itself"""
         with ui.button(text=self.text, icon=self.icon, on_click=self.handlePress, color=self.color if not self.pressed else self.pressedColor) as btn:
             btn.classes('px-5 m-[-0.2em] text-white')
             if not self.tooltip is None:
                 btn.tooltip(self.tooltip)
     def handlePress(self, state=None, suppress = False):
+        """Function to handle the press of the button or to silently change the state of the button with the suppress argument"""
         if state is None and not self.disable:
             self.pressed = not self.pressed
         if state == self.pressed:
@@ -160,6 +119,7 @@ class toggleButton:
 
 
 class Axis:
+    """Class to render the controll for one axis"""
     def __init__(self, axisname:str, unit='°', step=0.001, on_move=lambda a, d: None, position = 0.0):
         self.axisname = axisname
         self.axisIndex = robotModel.getAxisIndex(self.axisname)
@@ -176,6 +136,7 @@ class Axis:
         self.render()
 
     def updatePosition(self):
+        """Function to update the internal position from the grpc server"""
         if self.editing or robotServer.jointsValue is None or robotServer.Cartesian is None:
             return
         newPosition = (robotServer.Cartesian[self.axisIndex%robotModel.axisCount] if self.axisIndex >= robotModel.axisCount else list(robotServer.jointsValue)[self.axisIndex%robotModel.axisCount])*robotModel.AxisGain[self.axisIndex]
@@ -183,26 +144,30 @@ class Axis:
             self.lastPosition = self.position = newPosition
 
     def move(self, direction:int, distance:float, absolute:bool = False):
+        """Function to move the axis either a distance in the direction or to the absolute position specified in the position field"""
         self.editing = False
         if not robotServer.moving:
             logger.info(f'Moving to {distance * direction}')
             self.on_move(self.axisname, distance * direction if not absolute else self.position-self.lastPosition, absolute)
 
     def changeEditing(self):
+        """A Funtion to change the Axis position not to refresh"""
         self.editing = True
 
     def render(self):
+        """Function to render the Axis btns"""
         buttonClasses = 'm-[-0.2em] mb-[-0.3em] mt-[-0.3em]'
         with ui.column().classes('text-center items-center items-stretch mb-[0em]'):
-            ui.colors(primary='rgb(15 23 42)')
-            ui.label(f'{self.axisname} [{self.unit}]').classes('mb-[-0.5em] text-white')
-            ui.button('',icon='keyboard_double_arrow_up', on_click=lambda e: self.move(direction.up, self.fastSpeed)).classes(buttonClasses)
-            ui.button('',icon='keyboard_arrow_up', on_click=lambda e: self.move(direction.up, self.slowSpeed)).classes(buttonClasses)
-            self.input = ui.number(value=self.position, format=f'%.{self.places}f', step=robotModel.AxisSteps[self.axisIndex]/10).on('blur', lambda e: self.move(0, 0, True)).on('focus', self.changeEditing).props('dense borderless color=red-1').classes('bg-slate-700 border-solid border rounded-md my-[-0.4em]').style('width: 5em').bind_value(self, 'position')
-            ui.button('',icon='keyboard_arrow_down', on_click=lambda e: self.move(direction.down, self.slowSpeed)).classes(buttonClasses)
-            ui.button('',icon='keyboard_double_arrow_down', on_click=lambda e: self.move(direction.down, self.fastSpeed)).classes(buttonClasses)
+            ui.colors(primary='rgb(15 23 42)')      # setup style
+            ui.label(f'{self.axisname} [{self.unit}]').classes('mb-[-0.5em] text-white')        # Axisname
+            ui.button('',icon='keyboard_double_arrow_up', on_click=lambda e: self.move(direction.up, self.fastSpeed)).classes(buttonClasses)    # Btn up fast
+            ui.button('',icon='keyboard_arrow_up', on_click=lambda e: self.move(direction.up, self.slowSpeed)).classes(buttonClasses)           # Btn up slow
+            self.input = ui.number(value=self.position, format=f'%.{self.places}f', step=robotModel.AxisSteps[self.axisIndex]/10).on('blur', lambda e: self.move(0, 0, True)).on('focus', self.changeEditing).props('dense borderless color=red-1').classes('bg-slate-700 border-solid border rounded-md my-[-0.4em]').style('width: 5em').bind_value(self, 'position')  # Current position of the Axis
+            ui.button('',icon='keyboard_arrow_down', on_click=lambda e: self.move(direction.down, self.slowSpeed)).classes(buttonClasses)       # Btn down slow
+            ui.button('',icon='keyboard_double_arrow_down', on_click=lambda e: self.move(direction.down, self.fastSpeed)).classes(buttonClasses)# Btn down fast
 
 class robotDescription:
+    """Class to parse and hold all important parameters of the robot"""
     maxLinearSpeed = 0.1
     maxAngualarSpeed = 0.1
     maxLinearTolerance = 0
@@ -213,7 +178,7 @@ class robotDescription:
     files:list[str] = []
 
     def __init__(self, path:str=None, id:str=None):
-        if path is None or path == '' or not path.endswith('.json') or id is None:
+        if path is None or path == '' or not path.endswith('.json') or id is None:      # Redirect to selection page if robot hasn't been chosen
             self.name = ''
             self.axisCount = 0
             self.AxisNames = []
@@ -222,19 +187,19 @@ class robotDescription:
             self.rotationAxisCount = 0
             ui.open('/')
             return
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, 'r', encoding='utf-8') as f:        # Open the json file of the robot
             self.isInitalized = True
             jsonData = json.loads(f.read())
             self.name = jsonData['name']
             self.has3DModel = jsonData['has3DModel']
-            if os.path.isfile(f'{JSONPath}{id}/model.json') and self.has3DModel:
-                with open(f'{JSONPath}{id}/model.json', 'r') as f:
+            if os.path.isfile(f'{JSONPath}{id}/model.json') and self.has3DModel:    # check if file exists and if the robot has a 3d model
+                with open(f'{JSONPath}{id}/model.json', 'r') as f:      # open the json file for the simulation
                     modelJson = json.loads(f.read())
-                    self.jointLookupMatrix = [np.array(x) for x in modelJson['jointLookupMatrix']]
-                    self.offsets = modelJson['offsets']
-                    self.files = modelJson['files']
-                    self.globalSimulationRotation = [np.array(x) for x in modelJson['globalRotation']]
-                app.add_static_files(f'/static/{id}/', f'{JSONPath}{id}/')
+                    self.jointLookupMatrix = [np.array(x) for x in modelJson['jointLookupMatrix']]      # Matrix to lookup the vector of the joint
+                    self.offsets = modelJson['offsets']                                                 # List to get the offset of the link relative to the origin
+                    self.files = modelJson['files']                                                     # List of all 3D files of the robot
+                    self.globalSimulationRotation = [np.array(x) for x in modelJson['globalRotation']]  # Calibration offsets for the robot
+                app.add_static_files(f'/static/{id}/', f'{JSONPath}{id}/')                    # Configure the path for the 3D models
             joints = jsonData['joints']
             cartesian = jsonData['cartesian']
             self.axisCount = len(joints)
@@ -247,6 +212,7 @@ class robotDescription:
             self.isCompliant = jsonData['freedrive'] if 'freedrive' in jsonData.keys() else False
             self.id = id
     def getAxisIndex(self, name):
+        """Function which return the internal index of a axis by name"""
         return self.AxisNames.index(name)
     
 freedriveChangeBtn = None
@@ -367,22 +333,13 @@ class Simulation:
         self.renderSimulation()
         self.updateSimulationTimer = ui.timer(0.1, callback=self.update, active=True)  
 
-    # def forwardKin(self):      Not needed
-    #     rotations = robotServer.jointsValue
-    #     matrix = TransformationMatix.compose(np.array([0.0, 0.0, 0.0]), rowan.from_euler(0.0, 0.0, 0.0, 'zyx'))
-    #     last_offset = np.array([0.0, 0.0, 0.0])
-    #     for offset, jointmatrix, rotOff, rotation in zip(robotModel.offsets[1:], robotModel.jointLookupMatrix[1:], robotModel.globalSimulationRotation[1:], rotations):
-    #         matrix = matrix * TransformationMatix.compose(-(np.array(offset) - last_offset), rowan.from_euler(*jointmatrix[::-1] * rotation + rotOff, 'zyx'))
-    #         last_offset = np.array(offset)
-    #     position, rotation = matrix.decomposeNumpy()
-    #     return position, rowan.to_euler(rotation)
-
     def changeVisibility(self, visible:bool):
         """changes the visibility of the simulation"""
         self.simulationDrawer.set_visibility(visible)
         
     @ui.refreshable
-    def renderSimulation(self):         # Sets up the simulation
+    def renderSimulation(self):         
+        """Funtion for setting up the simulation"""
         if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel:
             return
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
@@ -410,7 +367,8 @@ class Simulation:
                 for _ in range(len(robotModel.files)*2):        # Cleaning up
                     self.scene.stack.pop()      
 
-    def update(self):               # Updates the Simulation periodically 
+    def update(self):               
+        """Funtion for updating the simulation""" 
         if robotServer.client is None or robotServer.jointsValue is None:
             return
         self.jointRotations = [0.0] + list(robotServer.jointsValue)
@@ -444,7 +402,8 @@ class Simulation:
                 self.grippedObjectProperties = []
                 clone.visible(False)
 
-class Robot:                        # Class to handle communication with the server
+class Robot:                        
+    """Class to handle communication with the server"""
     def __init__(self) -> None:
         self.jointsValue = None
         self.robotPose = None
@@ -466,17 +425,20 @@ class Robot:                        # Class to handle communication with the ser
         with ui.dialog() as self.robotNotConnectedDialog, ui.card().style('width:25%'):     # Dialog to display errormessage when robot isn't is connected but the robot is commanded
             ui.label("The robot can't be commanded while it's disconnected.")
             ui.button('OK', on_click=self.robotNotConnectedDialog.close)
-    def connectRobot(self):         # Connects the robot to the grpc server and changes the status button
+    def connectRobot(self):         
+        """Connects the robot to the grpc server and changes the status button"""
         if power is not None:
             power.handlePress(True, suppress=True)
         if self.client is None:
-            self.client = RobotClient(clientAdress, self.myProcessSubscription)
-    def disconnectRobot(self):      # Disconnects the robot and change the status
-        power.handlePress(False, suppress=True)
+            self.client = RobotClient(clientAdress, self.myProcessSubscription)      # connect robot
+    def disconnectRobot(self):      
+        """Disconnects the robot and change the status"""
+        power.handlePress(False, suppress=True)       # Update Btn
         if not self.client is None:
-            self.client.shutdown()
+            self.client.shutdown()      # disconnect robot
             self.client = None
-    def btnMoveJoints(self, axisName:str, distance:float, absolute:bool = False):   # Moves one joint by the distance, distance can either be relative or absolute, joint is selected by name
+    def btnMoveJoints(self, axisName:str, distance:float, absolute:bool = False):   
+        """Function to move one joint by the distance, distance can either be relative or absolute, joint is selected by name"""
         if robotServer.freeDrive:
             self.invalideMoveDialog.open()
             return
@@ -487,11 +449,12 @@ class Robot:                        # Class to handle communication with the ser
         pose = [0] * robotModel.axisCount
         pose[axisIndex%robotModel.axisCount] = distance * (0.1 if precision else 1) * (robotModel.AxisSteps[axisIndex] if not absolute else 1) / robotModel.AxisGain[axisIndex]
         return self.moveJoints(pose)
-    def btnMoveCartesian(self, axisName:str, distance:float, absolute:bool = False):    # Moves one cartesian axis by the distance, distance can either be relative or absolute, axis is selected by name
-        if robotServer.freeDrive:
+    def btnMoveCartesian(self, axisName:str, distance:float, absolute:bool = False):
+        """Function to move one axis by the distance, distance can either be relative or absolute, axis is selected by name"""
+        if robotServer.freeDrive:           # Show error when in freedrive and attempt to move
             self.invalideMoveDialog.open()
             return
-        if robotServer.client is None:
+        if robotServer.client is None:           # Show error when robot not connected and attempt to move
             self.robotNotConnectedDialog.open()
             return
         axisIndex = robotModel.getAxisIndex(axisName)
@@ -499,27 +462,31 @@ class Robot:                        # Class to handle communication with the ser
         pose[axisIndex%robotModel.axisCount] = distance * -(0.1 if precision else 1) * (robotModel.AxisSteps[axisIndex] if not absolute else 1) / robotModel.AxisGain[axisIndex]
         return self.moveCartesian(pose)
     
-    def changeGripperState(self, state:bool):       # Changes the gripper state indicator button and changes the status button
+    def changeGripperState(self, state:bool):
+        """Function to change the gripper state indicator button and changes the status button"""
         if robotServer.client is None:
             self.robotNotConnectedDialog.open()
-            gripperChangeBtn.handlePress(not gripperChangeBtn.pressed, suppress=True)
+            gripperChangeBtn.handlePress(not gripperChangeBtn.pressed, suppress=True)       # Update Btn
             return
-        self.client.gripper(1.0 if state else 0.0)
+        self.client.gripper(1.0 if state else 0.0)      # Send command
 
-    def changeFreedrive(self, state:bool):       # Changes the freedrive state indicator button and changes the status button
+    def changeFreedrive(self, state:bool):
+        """Function to change the freedrive state indicator button and changes the status button"""
         if robotServer.client is None:
-            freedriveChangeBtn.handlePress(not freedriveChangeBtn.pressed, suppress=True)
+            freedriveChangeBtn.handlePress(not freedriveChangeBtn.pressed, suppress=True)   # Update Btn
             self.robotNotConnectedDialog.open()
             return
-        self.client.requester.freedrive(pbRobotControl.Freedrive(state=state))
+        self.client.requester.freedrive(pbRobotControl.Freedrive(state=state))      # Send command
 
-    def moveJoints(self, pose:list[int]):             # Moves the Joints to a absolute position specified in the pose list as radians 
+    def moveJoints(self, pose:list[int]):             
+        """Function to moves the Joints to a absolute position specified in the pose list as radians"""
         if self.jointsValue is not None:
             actualJoints = np.array(robotServer.jointsValue)
             logger.info(actualJoints)
             newJoints = actualJoints + np.array(pose)
             robotServer.client.moveJoints(jointsOrPose=pbBase.ArrayDouble(value=list(newJoints)),override=speed)
-    def moveCartesian(self, pose:list[int]):          # Moves the Axis to a absolute position specified in the pose list as radians
+    def moveCartesian(self, pose:list[int]):
+        """Moves the Axis to a absolute position specified in the pose list as radians"""
         if self.robotPose is not None:
             actualPose = TransformationMatix.fromPose(self.robotPose)       # Initial Pose of the robot
             offset = TransformationMatix.compose(pose[:3],rowan.from_euler(pose[robotModel.getAxisIndex('RZ')-robotModel.axisCount] if 'RZ' in robotModel.AxisNames else 0.0,   # new Transformation to apply
@@ -527,9 +494,11 @@ class Robot:                        # Class to handle communication with the ser
                                                                            pose[robotModel.getAxisIndex('RX')-robotModel.axisCount] if 'RX' in robotModel.AxisNames else 0.0,'zyx'))
             newPose = actualPose*offset            
             robotServer.client.moveCartesian(pose=newPose.pose(),override=speed)        # Move the robot to the new pose
-    def registerUpdateCallback(self, callback:lambda:None):     # Registers a callback for the process subscription
+    def registerUpdateCallback(self, callback:lambda:None):     
+        """Function to register a callback for the process subscription"""
         self.callbacks.append(callback)
-    def myProcessSubscription(self, message):                   # Gets call when a new message from the grpc server has been received
+    def myProcessSubscription(self, message):                   
+        """Function which gets call when a new message from the grpc server has been received"""
         global freedriveChangeBtn
         try:
             self.published = message
@@ -564,10 +533,12 @@ class Robot:                        # Class to handle communication with the ser
         except Exception as e:
             logger.error(e)
 
-    def shutdown(self):                 # Shuts the requester down
+    def shutdown(self):                 
+        """Function to shut the requester down"""
         self.client.shutdown()
 
-class robotManager:                     # Class for managing all robots available in the interface
+class robotManager:                     
+    """Class for managing all robots available in the interface"""
     def __init__(self):
         with open(JSONPath+'robotSelect.json') as f:        # Parses all robots from the robotSelect.json
             jsonData = json.loads(f.read())
@@ -596,14 +567,16 @@ class robotManager:                     # Class for managing all robots availabl
             robotPath = (self.files[self.ids.index(self.selectedRobot)], self.selectedRobot)
             ui.open('/robot')
 
-def wrongRobotSelected():                       # Is called when a robot with different amount of axis is selected then the grpc server says
+def wrongRobotSelected():                       
+    """Is called when a robot with different amount of axis is selected then the grpc server says"""
     with ui.dialog() as wrongSelectionDialog, ui.card().style('width:25%'):
         ui.label('Please select the same robot as you are connected to.')
         ui.button('Done', on_click=lambda: ui.open('/'))
     wrongSelectionDialog.open()
 
 @ui.page('/robot')
-def robotPage():            # Main Interface page
+def robotPage():            
+    """Main Interface page"""
     global robotModel, robotServer, robotSim
     if robotPath[0] == '' or robotPath[1] == '':
         return RedirectResponse('/')
@@ -615,9 +588,10 @@ def robotPage():            # Main Interface page
 
 robotPath = ('', '')
 
-@ui.page('/')               # Page for selecting a robot
+@ui.page('/')               
 def select():
+    """Page for selecting a robot"""
     mgr = robotManager()
     mgr.choseRobotDialog.open()
 
-ui.run(show=False, title='Robot Interface')
+ui.run(show=True, title='Robot Interface')

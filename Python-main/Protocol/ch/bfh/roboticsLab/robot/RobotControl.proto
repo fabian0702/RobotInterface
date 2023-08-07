@@ -1,0 +1,209 @@
+// Protobuf protocol for robot control
+// Copyright (C) BFH roboticsLab
+// All rights reserved
+
+syntax = "proto3";
+
+package ch.bfh.roboticsLab.robot.pb;
+
+import "ch/bfh/roboticsLab/Base.proto";
+
+
+///   SERVICES   ///
+
+// Robot Telemetry published as stream
+service Publisher {
+  rpc subscribe (base.pb.Subscribe) returns (stream Published);
+}
+
+// Robot Telecommand responder service
+service Responder {
+
+  // Request that the interface connects to the robot.
+  // This call is useful when control of the robot may be shared with other modules.
+  // Note that the RobotControlProtocol Responder shall start without connection to the robot and
+  // at least one explicit request to connect to the robot must be made before any other services are called.
+  rpc setRobotConnection(RobotConnectionRequest) returns (base.pb.Acknowledge);
+
+  // Stop robot motions
+  rpc stop(Stop) returns (base.pb.Acknowledge);
+  // Wait for robot to finish motion, a given time, or a digital input
+  rpc wait(Wait) returns (base.pb.Acknowledge);
+  // Move in actuator space
+  rpc moveActuators(MoveActuators) returns (base.pb.Acknowledge);
+  // Move in joint space
+  rpc moveJoints(MoveJoints) returns (base.pb.Acknowledge);
+  // Move in Cartesian space
+  rpc moveCartesian(MoveCartesian) returns (base.pb.Acknowledge);
+  // Servo motion in joint space
+  rpc servoJoints(ServoJoints) returns (base.pb.Acknowledge);
+  // Enable/disable freedrive
+  rpc freedrive(Freedrive) returns (base.pb.Acknowledge);
+  // Control gripper
+  rpc gripper(Gripper) returns (base.pb.Acknowledge);
+  // Control digital outputs
+  rpc digitalOut(DigitalOutput) returns (base.pb.Acknowledge);
+  // Control analog outputs
+  rpc analogOut(AnalogOutput) returns (base.pb.Acknowledge);
+}
+
+///   MESSAGES   ///
+
+// Request to set connection state of a robot
+message RobotConnectionRequest {
+  // Request to connect to robot if true; disconnect from robot if false
+  bool connect = 1;
+}
+
+// State message definition
+message State {
+  // True if the robot is currently moving; false if stopped
+  bool moving = 1;
+  // True if currently connected to the robot; false if disconnected
+  bool connected = 2;
+}
+
+// Cartesian pose of a robot joint, used for educational purposes to visualize joint frames
+message RobotJointFrames {
+  // List of robot poses
+  repeated base.pb.Pose robotPose = 1;
+}
+
+// A generic published message that may contain some or all of the above
+message Published {
+  // Robot state
+  State state = 1;
+
+  // Robot current joint positions
+  base.pb.ArrayDouble jointValues = 10;
+  // Robot current Cartesian pose
+  base.pb.Pose robotPose = 11;
+  // Robot joint reference frames
+  RobotJointFrames robotJointFrames = 12;
+
+  // Gripper position [0..1]
+  Gripper gripper = 20;
+  // Freedrive state
+  Freedrive freedrive = 30;
+
+  // State of the digital inputs
+  base.pb.DigitalIO digitalInputs = 40;
+  // State of the analog inputs
+  base.pb.AnalogIO analogInputs = 50;
+}
+
+////    Commands    ////
+
+// Quit the robot control application
+message Quit {
+}
+
+// Stop Telecommand
+message Stop {
+}
+
+// Wait Telecommand
+message Wait {
+  oneof action{
+    // Wait the given time duration [s]
+    double duration = 1;
+    // Wait for the robot to arrive to the goal of the last move command
+    bool waitForRobot = 2;
+    // Wait until the digital input with the given index is read high (true)
+    uint32 digitalInputIndex = 3;
+  }
+}
+
+// Move in Actuator Space Telecommand
+message MoveActuators {
+  // List of actuator values to move to
+  repeated double actuators = 1;
+  // Speed to perform the motion
+  base.pb.LinearAngularPair speed = 2;
+  // Arrival tolerance
+  base.pb.LinearAngularPair tolerance = 3;
+  // Speed override
+  float override = 4;
+}
+
+// Move in Joint Space Telecommand
+message MoveJoints {
+  // The goal to move to
+  oneof goal {
+    // Joint values
+    base.pb.ArrayDouble joints = 1;
+    // Cartesian pose
+    base.pb.Pose pose = 2;
+  }
+  // Speed to perform the motion
+  base.pb.LinearAngularPair speed = 3;
+  // Arrival tolerance
+  base.pb.LinearAngularPair tolerance = 4;
+  // Speed override
+  float override = 5;
+}
+
+// Move in Cartesian Space Telecommand
+message MoveCartesian {
+  // Robot pose to move to
+  base.pb.Pose pose = 1;
+  // Speed to perform the motion
+  base.pb.LinearAngularPair speed = 2;
+  // Arrival tolerance
+  base.pb.LinearAngularPair tolerance = 3;
+  // Speed override
+  float override = 4;
+}
+
+// Servo in Joint Space Telecommand
+message ServoJoints {
+  oneof goal {
+    // Joint values
+    base.pb.ArrayDouble joints = 1;
+    // Cartesian pose
+    base.pb.Pose pose = 2;
+  }
+  // Time to perform the motion
+  double time = 3;
+  // Speed override
+  float override = 4;
+}
+
+// Gripper message
+message Gripper {
+  // Gripper position [0..1]: 0 = fully open; 1 = fully closed.
+  double position = 1;
+}
+
+// Freedrive mode message (for collaborative robots)
+message Freedrive {
+  // Freedrive state: on if true, otherwise off
+  bool state = 1;
+  // TODO: Add constraint parameters (for constrained Cartesian freedrive, e.g. force mode on UR)
+}
+
+// Set a digital output
+message DigitalOutput {
+  // The channel to use
+  oneof channel {
+    // Output index
+    int32 index = 1;
+    // Output name
+    string name = 2;
+  }
+  // Desired digital value
+  bool value = 10;
+}
+
+// Set an analog output
+message AnalogOutput {
+  // The channel to use
+  oneof channel {
+    // Output index
+    int32 index = 1;
+    // Output name
+    string name = 2;
+  }
+  // Desired analog value
+  float value = 10;
+}

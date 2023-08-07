@@ -1,0 +1,9 @@
+# Python requirements.
+# Note that due to the use of the Kinova Python library that was generated with an older version of protobuf,
+# older versions of gRPC and protobuf are defined here.
+# Install with:
+# python3 -m pip install -r requirements.txt
+protobuf==3.19.3
+grpcio==1.48.0
+grpcio-tools==1.48.0
+mypy-protobuf==3.4.0

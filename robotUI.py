@@ -253,70 +253,78 @@ freedriveChangeBtn = None
 power = None
 @ui.refreshable
 def renderRobot(robot:robotDescription):
+    """renders the controlls of the robot"""
     global freedriveChangeBtn, gripperChangeBtn, power
     ui.html('''<style>input[type=number]{-moz-appearance: textfield;color:white;text-align: center;}input::-webkit-outer-spin-button,input::-webkit-inner-spin-button {-webkit-appearance: none;margin: 0;}</style>''')
     with ui.left_drawer().classes('filter-none bg-slate-400 text-center items-center items-stretch py-0').props(f':width="{max(robotModel.axisCount - 1, 4)}80"'):
         with ui.row():
-            ui.button('', icon='settings', on_click=lambda e: ui.open('/')).classes('mt-4').tooltip('Displays the robot selection dialog')
+            ui.button('', icon='settings', on_click=lambda e: ui.open('/')).classes('mt-4').tooltip('Displays the robot selection dialog')      # Returns to the selection page
             ui.label(robot.name).classes('text-white text-4xl mt-4')
         with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):
             ui.label('Status').classes('mb-[-0.6em] mt-[-0.4em] text-white')
             with ui.row():
-                power = toggleButton('', icon='power', tooltip='displays if the robot is connected')
+                power = toggleButton('', icon='power', tooltip='displays if the robot is connected')        # Button to connect the grpc server
                 power.handlePress(True)
                 def onpowerchange(state):
+                    """connects and disconnects the grpc server"""
                     if power.pressed:
                         robotServer.connectRobot()
                     else:
                         robotServer.disconnectRobot()
                 power.onchange = onpowerchange
-                moving = toggleButton('', icon='open_in_full', disable=True, tooltip='displays if the robot is moving')
+                moving = toggleButton('', icon='open_in_full', disable=True, tooltip='displays if the robot is moving')     # Button which displays whether the robot is moving
                 def updateMoving():
+                    """updates the moving button to the current state of the robot"""
                     moving.handlePress(robotServer.moving if not robotServer.moving is None else False)
-                robotServer.registerUpdateCallback(updateMoving)
+                robotServer.registerUpdateCallback(updateMoving)        # Register a callback to update the moving button
         with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):
-            ui.label('Control').classes('mb-[-0.6em] mt-[-0.4em] text-white')
+            ui.label('Control').classes('mb-[-0.6em] mt-[-0.4em] text-white')       # Controlls elements for the robot
             with ui.row():
                 def changePrecision(pressed):
+                    """changes the precision mode of the interface"""
                     global precision
                     precision = pressed
-                toggleButton('', icon='biotech', on_change=changePrecision, tooltip='Puts the interface in precision mode where the robot only moves 1/10th the usual distance')
-                gripperChangeBtn = toggleButton('', icon='precision_manufacturing', on_change=robotServer.changeGripperState, tooltip='Changes the state of the gripper')
-                with ui.dialog() as speedChangeDialog, ui.card().style('width:25%'):
+                toggleButton('', icon='biotech', on_change=changePrecision, tooltip='Puts the interface in precision mode where the robot only moves 1/10th the usual distance')    # Button to put the Interface in precision mode
+                gripperChangeBtn = toggleButton('', icon='precision_manufacturing', on_change=robotServer.changeGripperState, tooltip='Changes the state of the gripper')           # Button to change the state of the gripper
+                with ui.dialog() as speedChangeDialog, ui.card().style('width:25%'):        # dialog to change the speed on certain robots
                     ui.label('Change speed:').classes('text-2xl')
                     ui.slider(min=0, max=1, step=0.01, value=speed, on_change=lambda e: speedLabel.set_text(f'Speed: {speed*100:.1f}%')).bind_value(globals(), 'speed')
                     speedLabel = ui.label(f'Speed: {speed*100:.1f}%').classes('mt-[-1em]')
                     ui.button('Close', on_click=speedChangeDialog.close)
-                ui.button('', icon='speed', on_click=speedChangeDialog.open).tooltip("Opens a dialog to set the robot's speed").classes('px-5 m-[-0.2em] text-white')
+                ui.button('', icon='speed', on_click=speedChangeDialog.open).tooltip("Opens a dialog to set the robot's speed").classes('px-5 m-[-0.2em] text-white')   # Button to speed change dialog
 
-                if robotModel.isCompliant:
+                if robotModel.isCompliant:          # If the robot has freedrive show button for it
                     freedriveChangeBtn = toggleButton('', icon='pan_tool', on_change=robotServer.changeFreedrive, tooltip='Puts the robot into freedrive')
                     freedriveChangeBtn.handlePress(robotModel.isCompliant and robotServer.freeDrive)
-        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):
+        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):  # The joints axis controlls
             with ui.row():
                 ui.label('Joints').classes(f'mb-[-1em] mt-[-0.4em] text-white')
                 async def copyToClipboardJoints():
+                    """copies the joints position of the robot to the clipboard"""
                     content = f'[{", ".join([f"{x:.4f}" for x in robotServer.jointsValue])}]'
                     logger.info(f'copied {content} to clipboard')
                     await ui.run_javascript(f'navigator.clipboard.writeText("{content}")', respond=False)
-                ui.button('', on_click=copyToClipboardJoints, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the joint values as radians to clipboard')
+                ui.button('', on_click=copyToClipboardJoints, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the joint values as radians to clipboard')     # Copy to clipboard button
             with ui.row():
                 for axis, pos in zip(robot.AxisNames[:robotModel.axisCount], robotServer.jointsValue if not robotServer.jointsValue is None else [0] * robotModel.axisCount):
                     a = Axis(axis, unit=robotModel.AxisUnits[robotModel.getAxisIndex(axis)],on_move=robotServer.btnMoveJoints, position = pos)
-                    robotServer.registerUpdateCallback(a.updatePosition)
-        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):
-            with ui.row():
+                    robotServer.registerUpdateCallback(a.updatePosition)        # Registering the nessecary callbacks for updating the position values
+
+        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):   # The cartesian axis controlls
+            with ui.row():  
                 ui.label('Cartesian').classes('mb-[-1em] mt-[-0.4em] text-white')
                 async def copyToClipboardCartesian():
+                    """copies the cartesian position of the robot to the clipboard"""
                     content = f'[{", ".join([f"{x:.4f}" for x in np.concatenate(TransformationMatix.fromPose(robotServer.robotPose).decomposeNumpy())])}]'
                     logger.info(f'copied {content} to clipboard')
                     await ui.run_javascript(f'navigator.clipboard.writeText("{content}")', respond=False)
-                ui.button('', on_click=copyToClipboardCartesian, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the cartesian values as x,y,z and a Quaternion to clipboard')
+                ui.button('', on_click=copyToClipboardCartesian, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the cartesian values as x,y,z and a Quaternion to clipboard')     # Copy to clipboard button
             with ui.row():
                 for axis, pos in zip(robot.AxisNames[robotModel.axisCount:], robotServer.Cartesian if not robotServer.Cartesian is None else [0] * robotModel.axisCount):
                     a = Axis(axis, unit=robotModel.AxisUnits[robotModel.getAxisIndex(axis)], on_move=robotServer.btnMoveCartesian, position=pos)
-                    robotServer.registerUpdateCallback(a.updatePosition)
-        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):
+                    robotServer.registerUpdateCallback(a.updatePosition)        # Registering the nessecary callbacks for updating the position values
+    
+        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):       # Buttons to show the charts or hide the simulation
             ui.label('Charts').classes('mb-[-0.6em] mt-[-0.4em] text-white')
             with ui.row():
                 jChartBtn = toggleButton('J', tooltip='Displays a chart with all the joints')
@@ -326,21 +334,23 @@ def renderRobot(robot:robotDescription):
                 SimulationBtn = toggleButton('', icon='view_in_ar', tooltip='Hides the 3D simulation', on_change=robotSim.changeVisibility)
                 SimulationBtn.handlePress(state=True, suppress=True)
                 
-    with ui.column():
+    with ui.column():       # All the charts
         jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
         XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount:robotModel.axisCount+robotModel.rotationAxisCount])
         RChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount+robotModel.rotationAxisCount:])
         
     def allChartsVisible(visible):
+        """makes all charts visible"""
         jChartBtn.handlePress(visible)
         XChartBtn.handlePress(visible)
         RChartBtn.handlePress(visible)
-    XChartBtn.onchange = XChart.changeVisibility
+    XChartBtn.onchange = XChart.changeVisibility        # Setting up the buttons for the charts
     jChartBtn.onchange = jChart.changeVisibility
     RChartBtn.onchange = RChart.changeVisibility
     AllChartsBtn.onchange = allChartsVisible
 
 class Simulation:
+    """Class for the simulation of the robot"""
     def __init__(self) -> None:
         app.add_static_files('/static/environment/', './resources/environment/')
         self.graspableObjects:list[Object3D] = []
@@ -357,35 +367,37 @@ class Simulation:
         self.renderSimulation()
         self.updateSimulationTimer = ui.timer(0.1, callback=self.update, active=True)  
 
-    def forwardKin(self):
-        rotations = robotServer.jointsValue
-        matrix = TransformationMatix.compose(np.array([0.0, 0.0, 0.0]), rowan.from_euler(0.0, 0.0, 0.0, 'zyx'))
-        last_offset = np.array([0.0, 0.0, 0.0])
-        for offset, jointmatrix, rotOff, rotation in zip(robotModel.offsets[1:], robotModel.jointLookupMatrix[1:], robotModel.globalSimulationRotation[1:], rotations):
-            matrix = matrix * TransformationMatix.compose(-(np.array(offset) - last_offset), rowan.from_euler(*jointmatrix[::-1] * rotation + rotOff, 'zyx'))
-            last_offset = np.array(offset)
-        position, rotation = matrix.decomposeNumpy()
-        return position, rowan.to_euler(rotation)
+    # def forwardKin(self):      Not needed
+    #     rotations = robotServer.jointsValue
+    #     matrix = TransformationMatix.compose(np.array([0.0, 0.0, 0.0]), rowan.from_euler(0.0, 0.0, 0.0, 'zyx'))
+    #     last_offset = np.array([0.0, 0.0, 0.0])
+    #     for offset, jointmatrix, rotOff, rotation in zip(robotModel.offsets[1:], robotModel.jointLookupMatrix[1:], robotModel.globalSimulationRotation[1:], rotations):
+    #         matrix = matrix * TransformationMatix.compose(-(np.array(offset) - last_offset), rowan.from_euler(*jointmatrix[::-1] * rotation + rotOff, 'zyx'))
+    #         last_offset = np.array(offset)
+    #     position, rotation = matrix.decomposeNumpy()
+    #     return position, rowan.to_euler(rotation)
 
     def changeVisibility(self, visible:bool):
+        """changes the visibility of the simulation"""
         self.simulationDrawer.set_visibility(visible)
         
     @ui.refreshable
-    def renderSimulation(self):
+    def renderSimulation(self):         # Sets up the simulation
         if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel:
             return
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
             with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene, self.scene.group() as group:
                 group.rotate(0,0,0.685)
 
-                environment.initialize(self, self.scene)
-                for obj in self.graspableObjects:
+                environment.initialize(self, self.scene)    # Initializing of the scene
+
+                for obj in self.graspableObjects:       # preparation for highlightes objects
                     self.highlightedObjects.append(Object3D(obj.type, *obj.args[:-1], True).material(color='#0088ff', opacity=1.0))
 
                 lastOffset = [0.0, 0.0, 0.0]
                 self.links:list[ui.scene.group] = []
                 group.scale(-3.5)
-                for i, file in enumerate(robotModel.files):
+                for i, file in enumerate(robotModel.files):         # Adds all links to the robot
                     self.scene.stack.append(self.scene.group())              
                     self.scene.stack[-1].move(*(-np.array(robotModel.offsets[i]) + np.array(lastOffset)))
                     lastOffset = robotModel.offsets[i]
@@ -394,45 +406,45 @@ class Simulation:
                     self.scene.gltf(f'/static/{robotModel.id}/'+file, scale=0.001, offset=robotModel.offsets[i])
                 
                 with self.scene.group() as self.environmentGroupMoving:
-                    environment.initializeGripper(self, self.scene)
-                for _ in range(len(robotModel.files)*2):
-                    self.scene.stack.pop()
+                    environment.initializeGripper(self, self.scene)         # Initializing gripper if present
+                for _ in range(len(robotModel.files)*2):        # Cleaning up
+                    self.scene.stack.pop()      
 
-    def update(self):
+    def update(self):               # Updates the Simulation periodically 
         if robotServer.client is None or robotServer.jointsValue is None:
             return
         self.jointRotations = [0.0] + list(robotServer.jointsValue)
         jointTypes = ['REVOLUTE'] + robotModel.jointType
         for i, link in enumerate(self.links):       # Exclude Base
-            if jointTypes[i] == 'REVOLUTE':
+            if jointTypes[i] == 'REVOLUTE':         # Update robot joints
                 link.rotate(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i] + robotModel.globalSimulationRotation[i]))
             else:
                 link.move(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i] + robotModel.globalSimulationRotation[i]))
-        environment.update(self, robotServer, robotModel)
+        environment.update(self, robotServer, robotModel)       # Update Environment
         if robotServer.gripper > 0.5:                
-            for property, obj in zip(self.grippedObjectProperties, self.grippedObjects):
+            for property, obj in zip(self.grippedObjectProperties, self.grippedObjects):        # Handle gripped objects
                 obj.move(robotServer.Cartesian[0]+property[0][0]-property[2][0], robotServer.Cartesian[1]+property[0][1]-property[2][1], -robotServer.Cartesian[2]+property[0][2]+property[2][2])
                 matRot = Object3D.rotation_matrix_from_euler((robotServer.Cartesian[3] - property[2][3]), (robotServer.Cartesian[4] - property[2][4]), (robotServer.Cartesian[5] - property[2][5]))
                 matNew = np.matmul(np.array(matRot), np.array(property[1]))
                 obj.R = list(map(list, matNew))
                 obj._rotate()
         for i, obj, clone in zip(range(len(self.graspableObjects)), self.graspableObjects, self.highlightedObjects):
-            if sum([(obj.x-robotServer.Cartesian[0])**2, (obj.y-robotServer.Cartesian[1])**2, (obj.z+robotServer.Cartesian[2])**2]) < self.gripThreshold:
+            if sum([(obj.x-robotServer.Cartesian[0])**2, (obj.y-robotServer.Cartesian[1])**2, (obj.z+robotServer.Cartesian[2])**2]) < self.gripThreshold:   # Check if object if close enough to be gripped
                 if robotServer.gripper > 0.5:
-                    if len(self.grippedObjects) == 0:
+                    if len(self.grippedObjects) == 0:       # Grip objects if gripper has just been turned on
                         self.grippedObjects.append(obj)
                         self.grippedObjectProperties.append([[obj.x, obj.y, obj.z], obj.R, robotServer.Cartesian])
-                clone.move(obj.x, obj.y, obj.z)
+                clone.move(obj.x, obj.y, obj.z)             # Setup highlight
                 clone.scale(obj.sx, obj.sy, obj.sz)
                 clone.rotate_R(obj.R)
                 clone.material(self.grippedColor if robotServer.gripper > 0.5 else self.grippercloseColor)
                 clone.visible(True)
             else:
-                self.grippedObjects = []
+                self.grippedObjects = []                # reset highlight
                 self.grippedObjectProperties = []
                 clone.visible(False)
 
-class Robot:
+class Robot:                        # Class to handle communication with the server
     def __init__(self) -> None:
         self.jointsValue = None
         self.robotPose = None
@@ -448,23 +460,23 @@ class Robot:
         self.max_speed = pbBase.LinearAngularPair(linear = robotModel.maxLinearSpeed, angular=robotModel.maxAngualarSpeed)
         self.max_tolerance = pbBase.LinearAngularPair(linear = robotModel.maxLinearTolerance, angular=robotModel.maxAngularTolerance)
         self.callbacks = []
-        with ui.dialog() as self.invalideMoveDialog, ui.card().style('width:25%'):
+        with ui.dialog() as self.invalideMoveDialog, ui.card().style('width:25%'):          # Dialog to display errormessage when freedrive is enabled but the robot is commanded to move
             ui.label("The robot can't be moved by the buttons while in freedrive.")
             ui.button('OK', on_click=self.invalideMoveDialog.close)
-        with ui.dialog() as self.robotNotConnectedDialog, ui.card().style('width:25%'):
+        with ui.dialog() as self.robotNotConnectedDialog, ui.card().style('width:25%'):     # Dialog to display errormessage when robot isn't is connected but the robot is commanded
             ui.label("The robot can't be commanded while it's disconnected.")
             ui.button('OK', on_click=self.robotNotConnectedDialog.close)
-    def connectRobot(self):
+    def connectRobot(self):         # Connects the robot to the grpc server and changes the status button
         if power is not None:
             power.handlePress(True, suppress=True)
         if self.client is None:
             self.client = RobotClient(clientAdress, self.myProcessSubscription)
-    def disconnectRobot(self):
+    def disconnectRobot(self):      # Disconnects the robot and change the status
         power.handlePress(False, suppress=True)
         if not self.client is None:
             self.client.shutdown()
             self.client = None
-    def btnMoveJoints(self, axisName:str, distance:float, absolute:bool = False):
+    def btnMoveJoints(self, axisName:str, distance:float, absolute:bool = False):   # Moves one joint by the distance, distance can either be relative or absolute, joint is selected by name
         if robotServer.freeDrive:
             self.invalideMoveDialog.open()
             return
@@ -475,7 +487,7 @@ class Robot:
         pose = [0] * robotModel.axisCount
         pose[axisIndex%robotModel.axisCount] = distance * (0.1 if precision else 1) * (robotModel.AxisSteps[axisIndex] if not absolute else 1) / robotModel.AxisGain[axisIndex]
         return self.moveJoints(pose)
-    def btnMoveCartesian(self, axisName:str, distance:float, absolute:bool = False):
+    def btnMoveCartesian(self, axisName:str, distance:float, absolute:bool = False):    # Moves one cartesian axis by the distance, distance can either be relative or absolute, axis is selected by name
         if robotServer.freeDrive:
             self.invalideMoveDialog.open()
             return
@@ -487,60 +499,59 @@ class Robot:
         pose[axisIndex%robotModel.axisCount] = distance * -(0.1 if precision else 1) * (robotModel.AxisSteps[axisIndex] if not absolute else 1) / robotModel.AxisGain[axisIndex]
         return self.moveCartesian(pose)
     
-    def changeGripperState(self, state:bool):
+    def changeGripperState(self, state:bool):       # Changes the gripper state indicator button and changes the status button
         if robotServer.client is None:
             self.robotNotConnectedDialog.open()
             gripperChangeBtn.handlePress(not gripperChangeBtn.pressed, suppress=True)
             return
         self.client.gripper(1.0 if state else 0.0)
 
-    def changeFreedrive(self, state:bool):
+    def changeFreedrive(self, state:bool):       # Changes the freedrive state indicator button and changes the status button
         if robotServer.client is None:
             freedriveChangeBtn.handlePress(not freedriveChangeBtn.pressed, suppress=True)
             self.robotNotConnectedDialog.open()
             return
         self.client.requester.freedrive(pbRobotControl.Freedrive(state=state))
 
-    def moveJoints(self, pose:list[int]):
+    def moveJoints(self, pose:list[int]):             # Moves the Joints to a absolute position specified in the pose list as radians 
         if self.jointsValue is not None:
             actualJoints = np.array(robotServer.jointsValue)
             logger.info(actualJoints)
             newJoints = actualJoints + np.array(pose)
             robotServer.client.moveJoints(jointsOrPose=pbBase.ArrayDouble(value=list(newJoints)),override=speed)
-    def moveCartesian(self, pose:list[int]):
+    def moveCartesian(self, pose:list[int]):          # Moves the Axis to a absolute position specified in the pose list as radians
         if self.robotPose is not None:
-            actualPose = TransformationMatix.fromPose(self.robotPose)
-            robotModel.AxisNames
-            offset = TransformationMatix.compose(pose[:3],rowan.from_euler(pose[robotModel.getAxisIndex('RZ')-robotModel.axisCount] if 'RZ' in robotModel.AxisNames else 0.0,
+            actualPose = TransformationMatix.fromPose(self.robotPose)       # Initial Pose of the robot
+            offset = TransformationMatix.compose(pose[:3],rowan.from_euler(pose[robotModel.getAxisIndex('RZ')-robotModel.axisCount] if 'RZ' in robotModel.AxisNames else 0.0,   # new Transformation to apply
                                                                            pose[robotModel.getAxisIndex('RY')-robotModel.axisCount] if 'RY' in robotModel.AxisNames else 0.0, 
                                                                            pose[robotModel.getAxisIndex('RX')-robotModel.axisCount] if 'RX' in robotModel.AxisNames else 0.0,'zyx'))
             newPose = actualPose*offset            
-            robotServer.client.moveCartesian(pose=newPose.pose(),override=speed)
-    def registerUpdateCallback(self, callback:lambda:None):
+            robotServer.client.moveCartesian(pose=newPose.pose(),override=speed)        # Move the robot to the new pose
+    def registerUpdateCallback(self, callback:lambda:None):     # Registers a callback for the process subscription
         self.callbacks.append(callback)
-    def myProcessSubscription(self, message):
+    def myProcessSubscription(self, message):                   # Gets call when a new message from the grpc server has been received
         global freedriveChangeBtn
         try:
             self.published = message
-            self.jointsValue = np.array(message.jointValues.value) if message.HasField("jointValues") else self.jointsValue
+            self.jointsValue = np.array(message.jointValues.value) if message.HasField("jointValues") else self.jointsValue     # Extract Values from message
             self.robotPose = message.robotPose if message.HasField("robotPose") else self.robotPose
             self.moving = message.state.moving if message.HasField("state") else self.moving
             freeDriveAct = message.freedrive.state if message.HasField("freedrive") else False
             gripperAct = message.gripper.position if message.HasField("gripper") else 0.0
-            if self.robotPose is None or self.jointsValue is None or self.moving is None:
+            if self.robotPose is None or self.jointsValue is None or self.moving is None:       # Return if the server hasn't send any values yet
                 return
-            if not len(self.jointsValue) == robotModel.axisCount:
+            if not len(self.jointsValue) == robotModel.axisCount:                       # Calls the dialog when a robot has been selected which doesnt match the information from the grpc server
                 if self.wrongRobot:
                     return
                 self.wrongRobot = True
                 wrongRobotSelected()
-            if message.HasField("freedrive") and (not self.freeDrive == freeDriveAct) and (not freedriveChangeBtn is None):
+            if message.HasField("freedrive") and (not self.freeDrive == freeDriveAct) and (not freedriveChangeBtn is None):         # Updates the freedrive button if the state has changed
                 self.freeDrive = freeDriveAct
                 freedriveChangeBtn.handlePress(state=freeDriveAct, suppress=True)
-            if message.HasField("gripper") and (not (abs(self.gripper - gripperAct) < 0.01)) and (not gripperChangeBtn is None):
+            if message.HasField("gripper") and (not (abs(self.gripper - gripperAct) < 0.01)) and (not gripperChangeBtn is None):    # Updates the gripper button if the state has changed
                 self.gripper = gripperAct
                 gripperChangeBtn.handlePress(state=gripperAct>0.5, suppress=True)
-            if not self.initializedAxis and message.HasField("robotPose") and message.HasField("jointValues"):
+            if not self.initializedAxis and message.HasField("robotPose") and message.HasField("jointValues"):          # Sets the initial Values for the axis after initializing in the Interface
                 self.initializedAxis = True
                 renderRobot.refresh()
             newPosition, newOrientation = TransformationMatix.fromPose(self.robotPose).decomposeNumpy()
@@ -553,12 +564,12 @@ class Robot:
         except Exception as e:
             logger.error(e)
 
-    def shutdown(self):
+    def shutdown(self):                 # Shuts the requester down
         self.client.shutdown()
 
-class robotManager:
+class robotManager:                     # Class for managing all robots available in the interface
     def __init__(self):
-        with open(JSONPath+'robotSelect.json') as f:
+        with open(JSONPath+'robotSelect.json') as f:        # Parses all robots from the robotSelect.json
             jsonData = json.loads(f.read())
         self.ids = [robot['ID'] for robot in jsonData]
         self.files = [robot['file'] for robot in jsonData]
@@ -574,10 +585,10 @@ class robotManager:
             ui.label('Please select a robot from the dropdown before continuing.')
             ui.button('Close', on_click=self.returnToFirstDialog)
         self.wrongSelectionDialog.close()
-    def returnToFirstDialog(self):
+    def returnToFirstDialog(self):              # Return to selection dialog after selection of robot
         self.wrongSelectionDialog.close()
         self.choseRobotDialog.open()
-    def handleChoice(self, e):
+    def handleChoice(self, e):                  # processes the choice and configures the interface
         global robotPath
         if self.selectedRobot == 0:
             self.wrongSelectionDialog.open()            
@@ -585,26 +596,26 @@ class robotManager:
             robotPath = (self.files[self.ids.index(self.selectedRobot)], self.selectedRobot)
             ui.open('/robot')
 
-def wrongRobotSelected():
+def wrongRobotSelected():                       # Is called when a robot with different amount of axis is selected then the grpc server says
     with ui.dialog() as wrongSelectionDialog, ui.card().style('width:25%'):
         ui.label('Please select the same robot as you are connected to.')
         ui.button('Done', on_click=lambda: ui.open('/'))
     wrongSelectionDialog.open()
 
 @ui.page('/robot')
-def robotPage():
+def robotPage():            # Main Interface page
     global robotModel, robotServer, robotSim
     if robotPath[0] == '' or robotPath[1] == '':
         return RedirectResponse('/')
-    robotModel = robotDescription(path=JSONPath+robotPath[0], id=robotPath[1])
-    robotServer = Robot()
-    robotSim = Simulation()
-    app.on_shutdown(robotServer.client.shutdown)
-    renderRobot(robotModel)
+    robotModel = robotDescription(path=JSONPath+robotPath[0], id=robotPath[1])      # Setup of the parameters for the robot
+    robotServer = Robot()                                                           # Grpc requester and subscriber setup
+    robotSim = Simulation()                                                         # Setup of the simulation
+    app.on_shutdown(robotServer.client.shutdown)                                    
+    renderRobot(robotModel)                                                         # Renders the Interface
 
 robotPath = ('', '')
 
-@ui.page('/')
+@ui.page('/')               # Page for selecting a robot
 def select():
     mgr = robotManager()
     mgr.choseRobotDialog.open()

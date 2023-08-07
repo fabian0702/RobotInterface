@@ -1,0 +1,10 @@
+# Ignore proto auto-generated python files
+*pb2*
+ 
+*.swp
+*~
+__pycache__/
+
+.DS_Store
+
+.vscode/

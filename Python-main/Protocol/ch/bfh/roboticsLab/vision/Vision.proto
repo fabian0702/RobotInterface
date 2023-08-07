@@ -1,0 +1,123 @@
+// Protobuf protocol for vision
+// Copyright (C) BFH roboticsLab
+// All rights reserved
+
+syntax = "proto3";
+
+package ch.bfh.roboticsLab.vision.pb;
+
+import "ch/bfh/roboticsLab/Base.proto";
+
+///   SERVICES   ///
+
+// Camera images published as stream.
+service ImagePublisher {
+  rpc subscribe (base.pb.Subscribe) returns (stream Image);
+}
+
+// Object lists published as stream. Used for example to publish at regular
+// intervals the list of objects identified in the workspace.
+service ObjectListPublisher {
+  rpc subscribe (base.pb.Subscribe) returns (stream ObjectList);
+}
+
+///   MESSAGES   ///
+
+// A camera image.
+message Image {
+  // Supported image formats.
+  // Note: the raw formats follow the ROS naming convention.
+  // @see http://docs.ros.org/ image_encodings.h
+  enum Format {
+    // Default format, meaning the field is not set or has an unsupported format (not in the enum).
+    UNKNOWN = 0;
+    // Raw, 8-bit/pixel, 1 channel (equivalent to OpenCV format CV_8UC1).
+    MONO8 = 10;
+    // Raw, 8-bit/pixel, 3 channels: red-green-blue (equivalent to OpenCV format CV_8UC3).
+    RGB8 = 20;
+    // PNG format.
+    PNG = 30;
+    // JPEG format.
+    JPEG = 31;
+  }
+  // The format of the data in imageData.
+  Format format = 1;
+
+  // The image width in pixels.
+  uint32 width = 10;
+  // The image height in pixels.
+  uint32 height = 11;
+  // Number of bytes in one RAW image row (in case different from width)
+  uint32 stride = 12;
+
+  // Image data.
+  // For PNG or JPEG images: same as the content of a .png/.jpeg file
+  // For RAW_8UC1: matrix of 8-bit unsigned integers
+  bytes imageData = 20;
+}
+
+
+// This message describes a cuboid volume.
+// The size of each side is measured along a local reference frame
+// with its origin at a corner of the cuboid and the sides of
+// the cuboid aligned with the x, y, and z-axes of the frame.
+message Cuboid {
+  // The length of the cuboid along the X axis [m].
+  double lX = 1;
+  // The length of the cuboid along the Y axis [m].
+  double lY = 2;
+  // The length of the cuboid along the Z axis [m].
+  double lZ = 3;
+}
+
+// This message describes the dimensions and location of a bounding box.
+message BoundingBox {
+  // The dimensions of the bounding box (cuboid enclosing) an object.
+  Cuboid dimensions = 1;
+  // The pose of the cuboid's origin in the pose's reference frame.
+  base.pb.Pose pose = 2;
+}
+
+// An object with a location in the workspace.
+// It may also be used for reference frames of known locations.
+message Object {
+  // The type ID of this object.
+  ObjectType.Id type = 1;
+  // The location of the object.
+  oneof where {
+    // The location of the object's origin in the pose's reference frame.
+    // Use this parameter only if the 'type' of the object is defined above and
+    // this 'type' has been previously defined in some database.
+    base.pb.Pose pose = 2;
+    // The bounding box (size and pose) of the object.
+    // Use this parameter if the 'type' of the object is unknown or if its
+    // known 'type' does not define the size.
+    BoundingBox boundingBox = 3;
+  }
+}
+
+// This message describes in detail a type of object.
+message ObjectType {
+  // The unique identifier for this type of object.
+  Id id = 1;
+  // The English name of this object type.
+  string name = 10;
+  // The English plural name of this object.
+  string plural = 11;
+  // An english sentence describing the object
+  string description = 12;
+  // The dimensions of this object.
+  Cuboid dimensions = 20;
+  // A representative image (icon) of a generic object of this type.
+  Image genericImage = 30;
+  // The identifier for this object type.
+  message Id {
+    string value = 1;
+  }
+}
+
+// This message holds a list of Objects
+// (e.g. a list of identified objects in the workspace).
+message ObjectList {
+  repeated Object objects = 1;
+}

@@ -1,0 +1,24 @@
+# Generated directories
+out
+
+# File system
+.DS_Store
+
+# VS Code
+.vscode
+
+# Eclipse project files
+.project
+.cproject
+.settings
+
+# Qt project files
+*.config
+*.creator
+*.creator.user
+*.files
+*.includes
+
+# Temporary editor files
+*.swp
+*~

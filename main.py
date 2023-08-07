@@ -200,14 +200,16 @@ class robotDescription:
                     self.files = modelJson['files']                                                     # List of all 3D files of the robot
                     self.globalSimulationRotation = [np.array(x) for x in modelJson['globalRotation']]  # Calibration offsets for the robot
                 app.add_static_files(f'/static/{id}/', f'{JSONPath}{id}/')                    # Configure the path for the 3D models
-            joints = jsonData['joints']
+            self.hasJoints = 'joints' in jsonData.keys()
             cartesian = jsonData['cartesian']
-            self.axisCount = len(joints)
-            self.AxisNames = [str(i) for i in range(self.axisCount)] + [axis['name'] for axis in cartesian]
+            if self.hasJoints:
+                joints = jsonData['joints']
+            self.axisCount = len(joints) if self.hasJoints else len(cartesian)
+            self.AxisNames = [str(i) for i in range(self.axisCount) if self.hasJoints] + [axis['name'] for axis in cartesian]
             self.jointType = [joint['type'] for joint in joints]
-            self.AxisUnits = [joint['properties']['unit'] for joint in joints+cartesian]
-            self.AxisGain  = [joint['properties']['gain'] for joint in joints+cartesian]
-            self.AxisSteps = [joint['properties']['step'] for joint in joints+cartesian]
+            self.AxisUnits = [joint['properties']['unit'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
+            self.AxisGain  = [joint['properties']['gain'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
+            self.AxisSteps = [joint['properties']['step'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
             self.rotationAxisCount = len([name for name in self.AxisNames[self.axisCount:] if 'R' in name])
             self.isCompliant = jsonData['freedrive'] if 'freedrive' in jsonData.keys() else False
             self.id = id
@@ -262,19 +264,20 @@ def renderRobot(robot:robotDescription):
                 if robotModel.isCompliant:          # If the robot has freedrive show button for it
                     freedriveChangeBtn = toggleButton('', icon='pan_tool', on_change=robotServer.changeFreedrive, tooltip='Puts the robot into freedrive')
                     freedriveChangeBtn.handlePress(robotModel.isCompliant and robotServer.freeDrive)
-        with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):  # The joints axis controlls
-            with ui.row():
-                ui.label('Joints').classes(f'mb-[-1em] mt-[-0.4em] text-white')
-                async def copyToClipboardJoints():
-                    """copies the joints position of the robot to the clipboard"""
-                    content = f'[{", ".join([f"{x:.4f}" for x in robotServer.jointsValue])}]'
-                    logger.info(f'copied {content} to clipboard')
-                    await ui.run_javascript(f'navigator.clipboard.writeText("{content}")', respond=False)
-                ui.button('', on_click=copyToClipboardJoints, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the joint values as radians to clipboard')     # Copy to clipboard button
-            with ui.row():
-                for axis, pos in zip(robot.AxisNames[:robotModel.axisCount], robotServer.jointsValue if not robotServer.jointsValue is None else [0] * robotModel.axisCount):
-                    a = Axis(axis, unit=robotModel.AxisUnits[robotModel.getAxisIndex(axis)],on_move=robotServer.btnMoveJoints, position = pos)
-                    robotServer.registerUpdateCallback(a.updatePosition)        # Registering the nessecary callbacks for updating the position values
+        if robotModel.hasJoints:
+            with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):  # The joints axis controlls
+                with ui.row():
+                    ui.label('Joints').classes(f'mb-[-1em] mt-[-0.4em] text-white')
+                    async def copyToClipboardJoints():
+                        """copies the joints position of the robot to the clipboard"""
+                        content = f'[{", ".join([f"{x:.4f}" for x in robotServer.jointsValue])}]'
+                        logger.info(f'copied {content} to clipboard')
+                        await ui.run_javascript(f'navigator.clipboard.writeText("{content}")', respond=False)
+                    ui.button('', on_click=copyToClipboardJoints, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the joint values as radians to clipboard')     # Copy to clipboard button
+                with ui.row():
+                    for axis, pos in zip(robot.AxisNames[:robotModel.axisCount], robotServer.jointsValue if not robotServer.jointsValue is None else [0] * robotModel.axisCount):
+                        a = Axis(axis, unit=robotModel.AxisUnits[robotModel.getAxisIndex(axis)],on_move=robotServer.btnMoveJoints, position = pos)
+                        robotServer.registerUpdateCallback(a.updatePosition)        # Registering the nessecary callbacks for updating the position values
 
         with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):   # The cartesian axis controlls
             with ui.row():  
@@ -293,7 +296,8 @@ def renderRobot(robot:robotDescription):
         with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):       # Buttons to show the charts or hide the simulation
             ui.label('Charts').classes('mb-[-0.6em] mt-[-0.4em] text-white')
             with ui.row():
-                jChartBtn = toggleButton('J', tooltip='Displays a chart with all the joints')
+                if robotModel.hasJoints:
+                    jChartBtn = toggleButton('J', tooltip='Displays a chart with all the joints')
                 XChartBtn = toggleButton('X', tooltip='Displays a chart with all the linear axis')
                 RChartBtn = toggleButton('R', tooltip='Displays a chart with all the rotation axis')
                 AllChartsBtn = toggleButton('', icon='done_all', tooltip='Displays a chart with all joints and axies')
@@ -301,17 +305,20 @@ def renderRobot(robot:robotDescription):
                 SimulationBtn.handlePress(state=True, suppress=True)
                 
     with ui.column():       # All the charts
-        jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
+        if robotModel.hasJoints:
+            jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
         XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount:robotModel.axisCount+robotModel.rotationAxisCount])
         RChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount+robotModel.rotationAxisCount:])
         
     def allChartsVisible(visible):
         """makes all charts visible"""
-        jChartBtn.handlePress(visible)
+        if robotModel.hasJoints:
+            jChartBtn.handlePress(visible)
         XChartBtn.handlePress(visible)
         RChartBtn.handlePress(visible)
     XChartBtn.onchange = XChart.changeVisibility        # Setting up the buttons for the charts
-    jChartBtn.onchange = jChart.changeVisibility
+    if robotModel.hasJoints:
+        jChartBtn.onchange = jChart.changeVisibility
     RChartBtn.onchange = RChart.changeVisibility
     AllChartsBtn.onchange = allChartsVisible
 

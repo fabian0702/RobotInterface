@@ -1,0 +1,5 @@
+[submodule "Protocol"]
+	path = Protocol
+	url = https://gitlab.ti.bfh.ch/roboticsLab/Protocol.git
+[submodule "Protocol/"]
+	branch = main

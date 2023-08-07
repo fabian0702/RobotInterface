@@ -4,6 +4,7 @@ To install all necessary python packages run
 ```
 python3 -m pip install -r requirements.txt
 ```
+Please follow the steps in the ```/Python-main/README.md``` to install the BFH-HuCE Framework
 ## Starting the interface
 To start the interface run:
 ```

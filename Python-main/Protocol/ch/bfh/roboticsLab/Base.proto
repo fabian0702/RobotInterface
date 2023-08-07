@@ -1,0 +1,104 @@
+// Protobuf protocol for basic message and service definitions
+// Copyright (C) BFH roboticsLab
+// All rights reserved
+
+syntax = "proto3";
+
+package ch.bfh.roboticsLab.base.pb;
+
+///   SERVICES   ///
+
+
+///   MESSAGES   ///
+
+// Empty message used as parameter for the 'subscribe' command of most publishers.
+message Subscribe {
+}
+
+// Base response for commands and requests.
+message Acknowledge {
+  // Possible acknowledge codes.
+  enum Code {
+    // Everything OK
+    OK = 0;
+    // An error occurred
+    ERROR = 1;
+    // A motion command will not be executed because the robot is already at the goal (within the tolerance requested)
+    MOTION_COMMAND_REFUSED_ALREADY_AT_GOAL = 20;
+  }
+  // Acknowledge code.
+  Code code = 1;
+  // Message in case the code is not OK.
+  string message = 2;
+}
+
+// This message holds one linear and one angular value.
+// This is useful to define linear and angular speeds or tolerances of trajectories.
+message LinearAngularPair {
+  // Linear value (e.g. meters)
+  double linear = 1;
+  // Angular value (e.g. radians)
+  double angular = 2;
+}
+
+// An array of double values
+message ArrayDouble {
+	repeated double value = 1;
+}
+
+// Position representation as Cartesian vector
+message Position {
+  // X coordinate in meters
+  double x = 1;
+  // Y coordinate in meters
+  double y = 2;
+  // Z coordinate in meters
+  double z = 3;
+}
+
+// Orientation representation as Quaternion
+message Quaternion {
+  // W quaternion component
+  double qw = 1;
+  // X quaternion component
+  double qx = 2;
+  // Y quaternion component
+  double qy = 3;
+  // Z quaternion component
+  double qz = 4;
+}
+
+// Cartesian pose relative to a reference frame.
+message Pose {
+  // Possible Cartesian pose reference frames.
+  // Note that these frames may be known or unknown depending on the application.
+  enum Frame {
+    // World reference frame, used by default.
+    WORLD = 0;
+    // Robot base. Depending on the application, the robot base may be the same as the WORLD reference frame.
+    ROBOT_BASE = 1;
+    // Robot flange where the tool is attached to the robot.
+    ROBOT_FLANGE = 2;
+    // Robot tool center point (TCP).
+    ROBOT_TOOL = 3;
+  }
+  // Reference frame of this pose.
+  Frame frame = 1;
+
+  // Cartesian position [meter] (3 elements: X, Y, Z)
+  Position position = 2;
+  // Orientation quaternion (4 elements: x, y, z, w)
+  Quaternion orientation = 3;
+}
+
+// Array of digital inputs or outputs.
+message DigitalIO {
+  // Digital states.
+  repeated bool value = 1;
+}
+
+// Array of analog inputs or outputs.
+message AnalogIO {
+  // Analog states.
+  repeated float value = 1;
+}

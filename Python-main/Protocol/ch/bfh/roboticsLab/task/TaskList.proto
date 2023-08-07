@@ -1,0 +1,137 @@
+/** Protobuf protocol for representing a robot task list
+ * Copyright (C) BFH roboticsLab
+ * All rights reserved
+ */
+
+syntax = "proto3";
+
+import "ch/bfh/roboticsLab/Base.proto";
+import "ch/bfh/roboticsLab/robot/RobotControl.proto";
+
+package ch.bfh.roboticsLab.robot.task.pb;
+
+
+//// Services ////
+
+// Task List execution published as stream
+service Publisher {
+  rpc subscribe (base.pb.Subscribe) returns (stream Execution);
+}
+
+// Task List Telecommand responder service
+service Responder {
+
+  // Create a new task list
+  rpc newList(NewList) returns (base.pb.Acknowledge);
+  // Save the current task list
+  rpc save(Save) returns (base.pb.Acknowledge);
+  // Load a task list
+  rpc load(Load) returns (base.pb.Acknowledge);
+  // Set the given task list as the current task list
+  rpc set(TaskList) returns (base.pb.Acknowledge);
+  // Retrieve a list of all available task lists
+  rpc getAvailableTaskLists(GetAvailableTaskLists) returns (AvailableTaskLists);
+  // Execute the current task list
+  rpc execute(Execute) returns (base.pb.Acknowledge);
+  // Retrieve the current task list
+  rpc getTaskList(GetTaskList) returns (TaskList);
+}
+
+
+////    Published messages    ////
+
+// Broadcast task list execution state
+message Execution {
+  enum State {
+    UNKNOWN = 0;
+    IDLE = 1;
+    RUNNING = 2;
+    ERROR = 3; 
+  }
+  // Task list state
+  State state = 1;
+  // Number of tasks in this list
+  uint32 count = 2;
+  // Execution task index (program pointer)
+  uint32 pointer = 3;
+  // Execution task detail index (program pointer including trajectory substeps)
+  uint32 detailPointer = 10;
+  // Task being currently executed
+  ch.bfh.roboticsLab.robot.task.pb.Task task = 4;
+}
+
+////    Commands    ////
+
+// Start a new task list with no ID
+message NewList {
+}
+
+// Save the current task list and use the given ID
+message Save {
+  // ID to use for saving; if empty and task already had an ID, the old ID will be used
+  TaskList.Id id = 1;
+}
+
+// Load task list with the given ID
+message Load {
+  // ID of task list to load
+  TaskList.Id id = 1;
+}
+
+// Retrieve a list of all available task lists
+message GetAvailableTaskLists {
+}
+
+// Response to GetAvailableTaskLists
+message AvailableTaskLists {
+  // List of IDs of available tasks
+  repeated TaskList.Id ids = 2;
+}
+    
+// Execute the current task list
+message Execute {
+  // If true, start execution; if false, stop execution
+  bool run = 1;
+}
+
+// Retrieve the current task list
+message GetTaskList {
+}
+
+
+// Definition of a robot task list
+message TaskList {
+  // Identifies a task list
+  message Id {
+    // Task ID as string
+    string id = 1;
+  }
+  // ID of this task list, must not be defined
+  Id id = 1;
+
+  // List of tasks
+  repeated Task task = 2;
+
+  // Append task list to task executor or start executing immediately
+  bool append = 3;
+}
+
+// Task type
+message Task {
+  // Each task is one of these
+  oneof command {
+    robot.pb.Stop stop = 11;
+    robot.pb.Wait wait = 12;
+    robot.pb.MoveJoints moveJoints = 21;
+    robot.pb.MoveCartesian moveCartesian = 22;
+    robot.pb.ServoJoints servoJoints = 23;
+    robot.pb.Gripper grip = 30;
+    robot.pb.DigitalOutput digitalOutput = 40;
+  }
+      
+  // Move in Cartesian space
+  // message MoveCartesian {
+  //   // Do not wait for motion to complete, report Task done immediately 
+  //   bool noWait = 4;
+  // }
+}

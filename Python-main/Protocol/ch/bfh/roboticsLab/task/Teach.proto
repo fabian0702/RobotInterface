@@ -1,0 +1,72 @@
+// Protobuf protocol for teaching a robot tasks
+// Copyright (C) BFH roboticsLab
+// All rights reserved
+
+syntax = "proto3";
+
+package ch.bfh.roboticsLab.task.teach.pb;
+
+import "ch/bfh/roboticsLab/Base.proto";
+
+/** This file defines the messages used when a user teaches a robot. */
+
+//// Services ////
+
+// Teach Telecommand responder service
+service Responder {
+
+  // Stop motions
+  rpc stop(Stop) returns (base.pb.Acknowledge);
+  // Record this point
+  rpc point(Point) returns (base.pb.Acknowledge);
+  // Record trajectory
+  rpc trajectory(Trajectory) returns (base.pb.Acknowledge);
+  // Record gripper
+  rpc gripper(Gripper) returns (base.pb.Acknowledge);
+  // Record wait
+  rpc wait(Wait) returns (base.pb.Acknowledge);
+}
+
+
+// Stop motion
+message Stop {}
+
+// Record this point
+message Point {
+  // Available robot spaces tp save a point
+  enum Space {
+    // Cartesian space (default)
+    CARTESIAN = 0;
+    // Joint space
+    JOINT = 1;
+  }
+
+  // Linear speed to perform the motion [m/s] (angular speeds will be 10 times this number in rad/s) 
+  double speed = 1;
+  // Arrival tolerance to arrive at the point [m] (angular tolerance will be 10 times this number in rad)
+  double tolerance = 2;
+  // Robot space to save this point 
+  Space space = 3;
+}
+
+// Record trajectory
+message Trajectory {
+  // Trajectory save state: start saving if true, stop saving if false
+  bool state = 1;
+}
+
+// Control gripper
+message Gripper {
+  /* Gripper position. Normalized values:
+   * - 0 = fully open
+   * - 1 = fully closed
+   * In this way the same command can be used for boolean grippers.
+   */
+  double position = 1; 
+}
+
+// Wait without motion
+message Wait {
+  // Time to wait [s]
+  double duration = 1;
+}

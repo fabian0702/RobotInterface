@@ -1,40 +1,6 @@
 {
   "name": "Asyril PowerDelta",
   "has3DModel" : false,
-  "joints": [
-    {
-      "type": "REVOLUTE",
-      "properties": {
-        "unit": "°",
-        "gain": 57.29577951308232,
-        "step": 1.0
-      }
-    },
-    {
-      "type": "REVOLUTE",
-      "properties": {
-        "unit": "°",
-        "gain": 57.29577951308232,
-        "step": 1.0
-      }
-    },
-    {
-      "type": "REVOLUTE",
-      "properties": {
-        "unit": "°",
-        "gain": 57.29577951308232,
-        "step": 1.0
-      }
-    },
-    {
-      "type": "REVOLUTE",
-      "properties": {
-        "unit": "°",
-        "gain": 57.29577951308232,
-        "step": 1.0
-      }
-    }
-  ],
   "cartesian": [
     {
       "properties": {

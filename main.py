@@ -69,7 +69,7 @@ class chart:
         if not robotServer.client is None and self.plot.visible and len(self.graphNames) > 0:       # Sanity check
             self.index = int((robotServer.currentTime - self.startTime) / chartUpdateInterval) % self.maxIndex      # Calculate index in ring buffer
             self.data[0][self.index] = (robotServer.currentTime - self.startTime) % chartsLogTime                   # write time in ringbuffer
-            for i, val in enumerate((self.gains * np.concatenate((robotServer.jointsValue, robotServer.Cartesian)))[self.startIndex:self.endIndex+1]):
+            for i, val in enumerate((self.gains * (np.concatenate((robotServer.jointsValue, robotServer.Cartesian)) if robotModel.hasJoints else robotServer.Cartesian))[self.startIndex:self.endIndex+1]):
                 self.data[i+1][self.index]=val      # write the values neccesary in the ring buffer
             self.plot.push(self.data[0], self.data[1:])     # update the chart
 
@@ -79,7 +79,9 @@ class chart:
             self.startTime = time.time()        # keep track of the start time
             self.chartUpdateTimer.activate()    # activate the refresh timer
             self.plot.clear()                   # reset the plot
-            self.data = [[i * chartUpdateInterval for i in range(self.maxIndex)]] + [[np.concatenate((robotServer.jointsValue, robotServer.Cartesian))[i +  self.startIndex] for n in range(self.maxIndex)] for i in range(len(self.graphNames))]       # prepare the data
+            if robotServer.Cartesian is None or ((not robotServer.hasJoints) and robotServer.JointsValues):
+                return
+            self.data = [[i * chartUpdateInterval for i in range(self.maxIndex)]] + [[(np.concatenate((robotServer.jointsValue, robotServer.Cartesian)) if robotModel.hasJoints else robotServer.Cartesian)[i +  self.startIndex] for n in range(self.maxIndex)] for i in range(len(self.graphNames))]       # prepare the data
         else:
             self.chartUpdateTimer.deactivate()      # deactivate refresh timer
         self.plot.set_visibility(visible)           # hide / show chart
@@ -206,11 +208,13 @@ class robotDescription:
                 joints = jsonData['joints']
             self.axisCount = len(joints) if self.hasJoints else len(cartesian)
             self.AxisNames = [str(i) for i in range(self.axisCount) if self.hasJoints] + [axis['name'] for axis in cartesian]
-            self.jointType = [joint['type'] for joint in joints]
+            self.jointType = [joint['type'] for joint in (joints if self.hasJoints else [])]
             self.AxisUnits = [joint['properties']['unit'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
             self.AxisGain  = [joint['properties']['gain'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
             self.AxisSteps = [joint['properties']['step'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
-            self.rotationAxisCount = len([name for name in self.AxisNames[self.axisCount:] if 'R' in name])
+            jointsOffset = (self.axisCount if self.hasJoints else 0)
+            print(jointsOffset)
+            self.rotationAxisCount = len([name for name in self.AxisNames[jointsOffset:] if 'R' in name.upper()])
             self.isCompliant = jsonData['freedrive'] if 'freedrive' in jsonData.keys() else False
             self.id = id
     def getAxisIndex(self, name):
@@ -289,7 +293,7 @@ def renderRobot(robot:robotDescription):
                     await ui.run_javascript(f'navigator.clipboard.writeText("{content}")', respond=False)
                 ui.button('', on_click=copyToClipboardCartesian, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the cartesian values as x,y,z and a Quaternion to clipboard')     # Copy to clipboard button
             with ui.row():
-                for axis, pos in zip(robot.AxisNames[robotModel.axisCount:], robotServer.Cartesian if not robotServer.Cartesian is None else [0] * robotModel.axisCount):
+                for axis, pos in zip(robot.AxisNames[robotModel.axisCount if robotModel.hasJoints else 0:], robotServer.Cartesian if not robotServer.Cartesian is None else [0] * robotModel.axisCount):
                     a = Axis(axis, unit=robotModel.AxisUnits[robotModel.getAxisIndex(axis)], on_move=robotServer.btnMoveCartesian, position=pos)
                     robotServer.registerUpdateCallback(a.updatePosition)        # Registering the nessecary callbacks for updating the position values
     
@@ -307,8 +311,9 @@ def renderRobot(robot:robotDescription):
     with ui.column():       # All the charts
         if robotModel.hasJoints:
             jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
-        XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount:robotModel.axisCount+robotModel.rotationAxisCount])
-        RChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount+robotModel.rotationAxisCount:])
+        print(robotModel.AxisNames[robotModel.axisCount:-robotModel.rotationAxisCount])
+        XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount if robotModel.hasJoints else 0:-robotModel.rotationAxisCount])
+        RChart = chart('', 'Time / s', '', robotModel.AxisNames[-robotModel.rotationAxisCount:])
         
     def allChartsVisible(visible):
         """makes all charts visible"""
@@ -347,7 +352,7 @@ class Simulation:
     @ui.refreshable
     def renderSimulation(self):         
         """Funtion for setting up the simulation"""
-        if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel:
+        if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel or not robotModel.hasJoints:
             return
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
             with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene, self.scene.group() as group:
@@ -376,7 +381,7 @@ class Simulation:
 
     def update(self):               
         """Funtion for updating the simulation""" 
-        if robotServer.client is None or robotServer.jointsValue is None:
+        if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints:
             return
         self.jointRotations = [0.0] + list(robotServer.jointsValue)
         jointTypes = ['REVOLUTE'] + robotModel.jointType

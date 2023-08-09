@@ -45,6 +45,7 @@ def update(self:sim, robotServer, robotModel):
         To access the parameters the robot has use ```robotModel.yourDesiredParameter```. To find all possible parameters please look at the parameter of the ```robotDescription``` class in main.py
         Please do not change the robotServer or robotModel object as this can lead to inconsistencies or bugs in the interface.
     """   
+    #self.c.move((time.time()-self.environmentData['startTime'])/40, 0.0, 0.0)
     for obj in self.graspableObjects:
         obj.rotate(time.time(), 0.0, 0.0)
     for obj in self.staticObjects:

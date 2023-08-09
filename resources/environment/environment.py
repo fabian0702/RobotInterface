@@ -8,6 +8,7 @@ class sim:
     environmentData:dict
     gripThreshold:float = 0.004
     highlightColor:str = '#0088ff'
+    addCameraHelper:bool = True
 
     def addEnvironmentCamera(self, position:list[float], look_at:list[float], fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
         pass
@@ -48,7 +49,9 @@ def initializeGripper(self:sim, scene:ui.scene):
         Keep in mind that the total limit of additional cameras is three in the entire scen.
         Please dont add any objects to ```self.graspableObjects``` list, as this can lead to weird behaviour of the simulation.
     """
-    self.addGripperCamera()
+    with scene.group() as g:
+        g.move(0, 0, 0)
+        self.addGripperCamera()
     pass
 def update(self:sim, robotServer, robotModel):
     """ 

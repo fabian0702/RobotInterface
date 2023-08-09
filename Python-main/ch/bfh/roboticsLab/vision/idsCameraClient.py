@@ -13,6 +13,9 @@ from typing import Callable
 import logging
 import os
 import time
+from sys import path
+
+path.append('../../../../')
 
 from ch.bfh.roboticsLab import Base_pb2 as pbBase
 from ch.bfh.roboticsLab.vision import Vision_pb2 as pbVision
@@ -123,9 +126,10 @@ class IdsCameraClient():
 #########################################    
 if __name__ == '__main__':
   camera = IdsCameraClient('localhost')
-  while(camera.getDim()[0]<0):
-    time.sleep(0.1)
-  image = camera.getImage()
-  cv2.imshow('Test',image)
-  cv2.waitKey(0)
+  while True:
+    while(camera.getDim()[0]<0):
+        time.sleep(0.1)
+    image = camera.getImage()
+    cv2.imshow('Test',image)
+    cv2.waitKey(1)
   camera.shutdown()

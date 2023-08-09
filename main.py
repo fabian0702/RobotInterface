@@ -33,7 +33,7 @@ class direction:
     up = 1
     down = -1
 
-clientAdress = '192.168.0.100'  # The address of the grpc server
+clientAdress = 'localhost'  # The address of the grpc server
 
 precision = False               # if in precision mode or not
 speed = 0.1                     # global speed
@@ -649,6 +649,7 @@ def select():
     mgr = robotManager()
     mgr.choseRobotDialog.open()
 
+<<<<<<< HEAD
 def startApi():
     #CameraServer.serve()
     uvicorn.run("main:captureApi", port=captureApi.port, host=captureApi.hostname, log_level="info")
@@ -670,3 +671,6 @@ ui.run(show=False, title='Robot Interface')
 
 # TODO:
 # - add labels to charts
+=======
+ui.run(show=True, title='Robot Interface')
+>>>>>>> f28f737645e8e6332ef67ee69669d35517c4102d

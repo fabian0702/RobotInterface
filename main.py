@@ -380,7 +380,8 @@ class Simulation:
         self.capture:bool = False
         self.cameraIndex:int = 0
         self.cameraHight:float = 0.2
-        self.cameraIds:str = []
+        self.cameras:list[Object3D] = []
+        self.addCameraHelper = True
         self.renderSimulation()
         self.updateSimulationTimer:ui.timer = ui.timer(0.1, callback=self.update, active=True)  
 
@@ -399,35 +400,42 @@ class Simulation:
         if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel or not robotModel.hasJoints:
             return
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
-            with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene, self.scene.group() as group:
-                group.rotate(0,0,0.685)
-                environment.initialize(self, self.scene)    # Initializing of the scene
+            with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene:
+                with self.scene.group() as group:
+                    group.rotate(0,0,0.685)
+                    environment.initialize(self, self.scene)    # Initializing of the scene
 
-                for obj in self.graspableObjects:       # preparation for highlightes objects
-                    self.highlightedObjects.append(Object3D(obj.type, *obj.args[:-1], True).material(color='#0088ff', opacity=1.0))
+                    for obj in self.graspableObjects:       # preparation for highlightes objects
+                        self.highlightedObjects.append(Object3D(obj.type, *obj.args[:-1], True).material(color='#0088ff', opacity=1.0))
 
-                lastOffset = [0.0, 0.0, 0.0]
-                self.links:list[ui.scene.group] = []
-                group.scale(-3.5)
-                for i, file in enumerate(robotModel.files):         # Adds all links to the robot
-                    self.scene.stack.append(self.scene.group())              
-                    self.scene.stack[-1].move(*(-np.array(robotModel.offsets[i]) + np.array(lastOffset)))
-                    lastOffset = robotModel.offsets[i]
-                    self.links.append(self.scene.group())  
-                    self.scene.stack.append(self.links[-1])   
-                    self.scene.gltf(f'/static/{robotModel.id}/'+file, scale=0.001, offset=robotModel.offsets[i])
-                
-                with self.scene.group() as self.environmentGroupMoving:
-                    environment.initializeGripper(self, self.scene)         # Initializing gripper if present
-                for _ in range(len(robotModel.files)*2):        # Cleaning up
-                    self.scene.stack.pop()      
+                    lastOffset = [0.0, 0.0, 0.0]
+                    self.links:list[ui.scene.group] = []
+                    group.scale(-3.5)
+                    for i, file in enumerate(robotModel.files):         # Adds all links to the robot
+                        self.scene.stack.append(self.scene.group())              
+                        self.scene.stack[-1].move(*(-np.array(robotModel.offsets[i]) + np.array(lastOffset)))
+                        lastOffset = robotModel.offsets[i]
+                        self.links.append(self.scene.group())  
+                        self.scene.stack.append(self.links[-1])   
+                        self.scene.gltf(f'/static/{robotModel.id}/'+file, scale=0.001, offset=robotModel.offsets[i])
+                    
+                    with self.scene.group() as self.environmentGroupMoving:
+                        environment.initializeGripper(self, self.scene)         # Initializing gripper if present
+                    for _ in range(len(robotModel.files)*2):        # Cleaning up
+                        self.scene.stack.pop() 
+                if self.addCameraHelper:
+                    for camera in self.cameras:
+                        self.scene.cameraHelper(camera)
+     
 
     def addEnvironmentCamera(self, position:list[float], look_at:list[float], fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
         """A Function to add up to three additional cameras to your scene whose parameter can be adjusted and their image is shown in a configurable bottom porch"""
         self.cameraIndex += 1
         if self.cameraIndex > 3:        # Check if more than three cameras has been added
             return
-        self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=look_at, position=position, fov=fov, focus=focus, far=far, near=near) # Initialize camera with given parameters
+        with self.scene.group() as g:
+            g.scale(1, 1, -1)
+            self.cameras.append(self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=look_at, position=position, fov=fov, focus=focus, far=far, near=near)) # Initialize camera with given parameters
 
     def addGripperCamera(self, fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
         """A Function to add up to three additional cameras to your scene whose parameter can be adjusted and their image is shown in a configurable bottom porch"""
@@ -436,9 +444,7 @@ class Simulation:
             return
         with self.scene.group() as g:
             g.scale(-1, 1, 1)
-            self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=[0, -1, 0], position=[0, 0, 0], fov=fov, focus=focus, far=far, near=near) # Initialize camera with given parameters
-
-
+            self.cameras.append(self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=[0, -1, 0], position=[0, 0, 0], fov=fov, focus=focus, far=far, near=near, up=[0, -1, 0])) # Initialize camera with given parameters
     def update(self) -> None:             
         """Funtion for updating the simulation""" 
         if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints:

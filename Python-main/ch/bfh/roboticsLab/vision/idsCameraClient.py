@@ -122,7 +122,7 @@ class IdsCameraClient():
 # Test & Example
 #########################################    
 if __name__ == '__main__':
-  camera = IdsCameraClient('192.168.0.100')
+  camera = IdsCameraClient('localhost')
   while(camera.getDim()[0]<0):
     time.sleep(0.1)
   image = camera.getImage()

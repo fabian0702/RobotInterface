@@ -1,6 +1,12 @@
 import time
 import rowan
 import math
+import base64
+import cv2
+import uvicorn
+import multiprocessing
+from fastapi import Request, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import json
 from fastapi.responses import RedirectResponse
 from nicegui import ui, app
@@ -18,6 +24,7 @@ from ch.bfh.roboticsLab.robot import RobotControl_pb2 as pbRobotControl
 from ch.bfh.roboticsLab.util.Logger import Logger
 from ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatix
 import environment
+import CameraServer
 
 logger = Logger('robotUI').getInstance()        # Setup Logger
 
@@ -26,13 +33,13 @@ class direction:
     up = 1
     down = -1
 
-clientAdress = 'localhost'  # The address of the grpc server
+clientAdress = '192.168.0.100'  # The address of the grpc server
 
 precision = False               # if in precision mode or not
 speed = 0.1                     # global speed
 
-chartsLogTime = 30              # Total timespan on chart
-chartUpdateInterval = 0.4       # Interval between data refreshs
+chartsLogTime = 10              # Total timespan on chart
+chartUpdateInterval = 0.2       # Interval between data refreshs
 
 JSONPath = './resources/models/'        # Path to where the configuration files for the robots are saved
 EnvironmentPath = './resources/environment/'        # Path to where the environments files are saved
@@ -79,7 +86,7 @@ class chart:
             self.startTime = time.time()        # keep track of the start time
             self.chartUpdateTimer.activate()    # activate the refresh timer
             self.plot.clear()                   # reset the plot
-            if robotServer.Cartesian is None or ((not robotServer.hasJoints) and robotServer.JointsValues):
+            if robotServer.Cartesian is None or ((not robotModel.hasJoints) and robotServer.jointsValues is None):
                 return
             self.data = [[i * chartUpdateInterval for i in range(self.maxIndex)]] + [[(np.concatenate((robotServer.jointsValue, robotServer.Cartesian)) if robotModel.hasJoints else robotServer.Cartesian)[i +  self.startIndex] for n in range(self.maxIndex)] for i in range(len(self.graphNames))]       # prepare the data
         else:
@@ -167,6 +174,32 @@ class Axis:
             self.input = ui.number(value=self.position, format=f'%.{self.places}f', step=robotModel.AxisSteps[self.axisIndex]/10).on('blur', lambda e: self.move(0, 0, True)).on('focus', self.changeEditing).props('dense borderless color=red-1').classes('bg-slate-700 border-solid border rounded-md my-[-0.4em]').style('width: 5em').bind_value(self, 'position')  # Current position of the Axis
             ui.button('',icon='keyboard_arrow_down', on_click=lambda e: self.move(direction.down, self.slowSpeed)).classes(buttonClasses)       # Btn down slow
             ui.button('',icon='keyboard_double_arrow_down', on_click=lambda e: self.move(direction.down, self.fastSpeed)).classes(buttonClasses)# Btn down fast
+
+class CaptureApi(FastAPI):
+    port = 8000
+    hostname = '127.0.0.1'
+    def __init__(self) -> None:
+        super().__init__()
+        self.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        self.imCount = 0
+        @self.post('/')
+        async def post(request:Request):
+
+            base64Img = await request.body()
+            imgData = base64.decodebytes(base64Img[base64Img.index(b','):])
+            nparr = np.frombuffer(imgData, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            logger.info('received capture')
+            CameraServer.appendCache(img)
+            return 'Ack'
+    def getCaptureUrl(self):
+        return f'http://{self.hostname}:{self.port}'
 
 class robotDescription:
     """Class to parse and hold all important parameters of the robot"""
@@ -306,6 +339,7 @@ def renderRobot(robot:robotDescription):
                 RChartBtn = toggleButton('R', tooltip='Displays a chart with all the rotation axis')
                 AllChartsBtn = toggleButton('', icon='done_all', tooltip='Displays a chart with all joints and axies')
                 SimulationBtn = toggleButton('', icon='view_in_ar', tooltip='Hides the 3D simulation', on_change=robotSim.changeVisibility)
+                SimulationBtn = toggleButton('', icon='screenshot_region', tooltip='Starts capturing a video stream', on_change=robotSim.changeCapture)
                 SimulationBtn.handlePress(state=True, suppress=True)
                 
     with ui.column():       # All the charts
@@ -342,12 +376,17 @@ class Simulation:
         self.grippercloseColor = '#0088ff'
         self.grippedColor = '#ff0000'
         self.gripThreshold = 0.004
+        self.capture = False
         self.renderSimulation()
         self.updateSimulationTimer = ui.timer(0.1, callback=self.update, active=True)  
 
     def changeVisibility(self, visible:bool):
         """changes the visibility of the simulation"""
         self.simulationDrawer.set_visibility(visible)
+
+    def changeCapture(self, state):
+        """Starts or stops capturing a video stream"""
+        self.capture = state
         
     @ui.refreshable
     def renderSimulation(self):         
@@ -357,7 +396,9 @@ class Simulation:
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
             with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene, self.scene.group() as group:
                 group.rotate(0,0,0.685)
-
+                #print('img')
+                self.scene.subCamera(0.0, 0.0, 1.0, 0.2, [0, 0, 0], [0, 0, 5])
+                self.scene.subCamera(0.0, 0.0, 0.5, 0.2, [0, 0.0, 0], [0, -1, 0])
                 environment.initialize(self, self.scene)    # Initializing of the scene
 
                 for obj in self.graspableObjects:       # preparation for highlightes objects
@@ -379,7 +420,7 @@ class Simulation:
                 for _ in range(len(robotModel.files)*2):        # Cleaning up
                     self.scene.stack.pop()      
 
-    def update(self):               
+    def update(self):             
         """Funtion for updating the simulation""" 
         if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints:
             return
@@ -413,6 +454,8 @@ class Simulation:
                 self.grippedObjects = []                # reset highlight
                 self.grippedObjectProperties = []
                 clone.visible(False)
+        if self.capture:
+            self.scene.img(captureApi.getCaptureUrl())     # Request a Frame
 
 class Robot:                        
     """Class to handle communication with the server"""
@@ -589,16 +632,16 @@ def wrongRobotSelected():
 @ui.page('/robot')
 def robotPage():            
     """Main Interface page"""
-    global robotModel, robotServer, robotSim
+    global robotModel, robotServer, robotSim, captureApi
     if robotPath[0] == '' or robotPath[1] == '':
         return RedirectResponse('/')
     robotModel = robotDescription(path=JSONPath+robotPath[0], id=robotPath[1])      # Setup of the parameters for the robot
     robotServer = Robot()                                                           # Grpc requester and subscriber setup
-    robotSim = Simulation()                                                         # Setup of the simulation
-    app.on_shutdown(robotServer.client.shutdown)                                    
+    robotSim = Simulation()                                                         # Setup of the simulation                                   
     renderRobot(robotModel)                                                         # Renders the Interface
 
 robotPath = ('', '')
+captureApi = CaptureApi()
 
 @ui.page('/')               
 def select():
@@ -606,4 +649,24 @@ def select():
     mgr = robotManager()
     mgr.choseRobotDialog.open()
 
-ui.run(show=True, title='Robot Interface')
+def startApi():
+    #CameraServer.serve()
+    uvicorn.run("main:captureApi", port=captureApi.port, host=captureApi.hostname, log_level="info")
+    #global apiServer
+    #apiServer = uvicorn.Server(config=config)
+    #apiServer.serve()
+if __name__ == '__main__':
+    apiThread = multiprocessing.Process(target=startApi).start()
+
+def shutdown():
+    #apiServer.shutdown()
+    #robotServer.client.shutdown()
+    #CameraServer.shutdown()
+    pass
+
+app.on_shutdown(shutdown)
+
+ui.run(show=False, title='Robot Interface')
+
+# TODO:
+# - add labels to charts

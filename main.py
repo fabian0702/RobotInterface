@@ -26,7 +26,7 @@ from ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatix
 import environment
 import CameraServer
 
-logger = Logger('robotUI').getInstance()        # Setup Logger
+logger = Logger('main').getInstance()        # Setup Logger
 
 class direction: 
     """Data class to store direction"""   
@@ -197,6 +197,7 @@ class CaptureApi(FastAPI):
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             logger.info('received capture')
             CameraServer.appendCache(img)
+            #logger.info(f'Appended image to cache, cache size: {len(CameraServer.imageCache)}')
             return 'Ack'
     def getCaptureUrl(self):
         return f'http://{self.hostname}:{self.port}'
@@ -339,7 +340,7 @@ def renderRobot(robot:robotDescription):
                 RChartBtn = toggleButton('R', tooltip='Displays a chart with all the rotation axis')
                 AllChartsBtn = toggleButton('', icon='done_all', tooltip='Displays a chart with all joints and axies')
                 SimulationBtn = toggleButton('', icon='view_in_ar', tooltip='Hides the 3D simulation', on_change=robotSim.changeVisibility)
-                SimulationBtn = toggleButton('', icon='screenshot_region', tooltip='Starts capturing a video stream', on_change=robotSim.changeCapture)
+                CaptureBtn = toggleButton('', icon='videocam', tooltip='Starts capturing a video stream', on_change=robotSim.changeCapture)
                 SimulationBtn.handlePress(state=True, suppress=True)
                 
     with ui.column():       # All the charts
@@ -373,12 +374,15 @@ class Simulation:
         self.color:list[list[str]] = [[]]
         self.highlightedObjects:list[Object3D] = []
         self.staticObjects:list[Object3D] = []
-        self.grippercloseColor = '#0088ff'
-        self.grippedColor = '#ff0000'
-        self.gripThreshold = 0.004
-        self.capture = False
+        self.grippercloseColor:str = '#0088ff'
+        self.grippedColor:str = '#ff0000'
+        self.gripThreshold:float = 0.004
+        self.capture:bool = False
+        self.cameraIndex:int = 0
+        self.cameraHight:float = 0.2
+        self.cameraIds:str = []
         self.renderSimulation()
-        self.updateSimulationTimer = ui.timer(0.1, callback=self.update, active=True)  
+        self.updateSimulationTimer:ui.timer = ui.timer(0.1, callback=self.update, active=True)  
 
     def changeVisibility(self, visible:bool):
         """changes the visibility of the simulation"""
@@ -386,6 +390,7 @@ class Simulation:
 
     def changeCapture(self, state):
         """Starts or stops capturing a video stream"""
+        logger.info(f'Changing state of video capture to {state}')
         self.capture = state
         
     @ui.refreshable
@@ -396,9 +401,6 @@ class Simulation:
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
             with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene, self.scene.group() as group:
                 group.rotate(0,0,0.685)
-                #print('img')
-                self.scene.subCamera(0.0, 0.0, 1.0, 0.2, [0, 0, 0], [0, 0, 5])
-                self.scene.subCamera(0.0, 0.0, 0.5, 0.2, [0, 0.0, 0], [0, -1, 0])
                 environment.initialize(self, self.scene)    # Initializing of the scene
 
                 for obj in self.graspableObjects:       # preparation for highlightes objects
@@ -420,7 +422,24 @@ class Simulation:
                 for _ in range(len(robotModel.files)*2):        # Cleaning up
                     self.scene.stack.pop()      
 
-    def update(self):             
+    def addEnvironmentCamera(self, position:list[float], look_at:list[float], fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
+        """A Function to add up to three additional cameras to your scene whose parameter can be adjusted and their image is shown in a configurable bottom porch"""
+        self.cameraIndex += 1
+        if self.cameraIndex > 3:        # Check if more than three cameras has been added
+            return
+        self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=look_at, position=position, fov=fov, focus=focus, far=far, near=near) # Initialize camera with given parameters
+
+    def addGripperCamera(self, fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
+        """A Function to add up to three additional cameras to your scene whose parameter can be adjusted and their image is shown in a configurable bottom porch"""
+        self.cameraIndex += 1
+        if self.cameraIndex > 3:        # Check if more than three cameras has been added
+            return
+        with self.scene.group() as g:
+            g.scale(-1, 1, 1)
+            self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=[0, -1, 0], position=[0, 0, 0], fov=fov, focus=focus, far=far, near=near) # Initialize camera with given parameters
+
+
+    def update(self) -> None:             
         """Funtion for updating the simulation""" 
         if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints:
             return
@@ -650,7 +669,8 @@ def select():
     mgr.choseRobotDialog.open()
 
 def startApi():
-    #CameraServer.serve()
+    CameraServer.serve()
+    logger.info('Done setting up Camera Server')
     uvicorn.run("main:captureApi", port=captureApi.port, host=captureApi.hostname, log_level="info")
     #global apiServer
     #apiServer = uvicorn.Server(config=config)

@@ -21,21 +21,15 @@ from concurrent import futures
 path.append('./Python-main/')
 from ch.bfh.roboticsLab.vision import Vision_pb2 as pb
 from ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpb
+from ch.bfh.roboticsLab.util.Logger import Logger
+
+logger = Logger('CameraServer').getInstance()
 
 # The delay between two publisher messages
 FRAME_RATE = 20
 PUBLISH_INTERVAL_SECONDS = 1/FRAME_RATE
 
-class cameraIDS:
-    def __init__(self):
-        self.channels = 3                    #3: channels for color mode(RGB); take 1 channel for monochrome
-        self.width = 0
-        self.height = 0
-        self.imageData = []
-
-    # Starts the driver and establishes the connection to the camera
-
-
+imageCache = None
 
 class Publisher(gpb.ImagePublisherServicer):
     def __init__(self):
@@ -50,11 +44,14 @@ class Publisher(gpb.ImagePublisherServicer):
         self.stoppingPublisher = True
 
     def subscribe(self, request, context):
+        global imageCache
         print('Publisher:  streaming start')
         while context.is_active() and not self.stoppingPublisher:
-            if not len(self.imageCache) > 0:
+            if imageCache is None:
                 continue
-            img = self.imageCache.pop(0)
+            logger.info(f'Image found in cache.')
+            img = imageCache
+            imageCache = None
             
             data = cv2.imencode('.jpg', img,[cv2.IMWRITE_JPEG_QUALITY, 95,cv2.IMWRITE_JPEG_OPTIMIZE,1])[1].tobytes()
             height, width, channels = img.shape
@@ -77,7 +74,8 @@ def serve():
     publisherServer.start()
 
 def appendCache(img):
-    publisher.appendCache(img)
+    global imageCache
+    imageCache = img
 
 def shutdown():
     print('Server shutdown')

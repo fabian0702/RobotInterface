@@ -63,8 +63,6 @@ def update(self:sim, robotServer, robotModel):
         Please do not change the robotServer or robotModel object as this can lead to inconsistencies or bugs in the interface.
     """   
     #self.c.move((time.time()-self.environmentData['startTime'])/40, 0.0, 0.0)
-    for obj in self.graspableObjects:
-        obj.rotate(time.time(), 0.0, 0.0)
     for obj in self.staticObjects:
         obj.rotate(time.time(), time.time(), time.time())
     pass

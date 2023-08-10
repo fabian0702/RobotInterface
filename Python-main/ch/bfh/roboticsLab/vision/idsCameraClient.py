@@ -14,6 +14,7 @@ import logging
 import os
 import time
 from sys import path
+import sys
 
 path.append('../../../../')
 
@@ -22,8 +23,8 @@ from ch.bfh.roboticsLab.vision import Vision_pb2 as pbVision
 from ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpbVision
 from ch.bfh.roboticsLab.util.Logger import Logger
 
-# Default publisher port
-PUBLISHER_PORT = 40831
+# Default publisher port  
+PUBLISHER_PORT = int(sys.argv[1])
 
 def processSubscription(published:pbVision.Image) -> None:
   '''! Empty, default process subscription callback.
@@ -121,15 +122,23 @@ class IdsCameraClient():
       '''
       return self.subscriber.subscribe(pbBase.Subscribe(), wait_for_ready=waitForReady, timeout=timeout)
 
+def main():
+  try:
+    camera = IdsCameraClient('localhost')
+    while True:
+        while(camera.getDim()[0]<0):
+            time.sleep(0.1)
+        image = camera.getImage()
+        cv2.imshow('Test',image)
+        cv2.waitKey(1)
+  except Exception as e:
+    print(e)
+    pass
+
 #########################################
 # Test & Example
 #########################################    
 if __name__ == '__main__':
-  camera = IdsCameraClient('localhost')
   while True:
-    while(camera.getDim()[0]<0):
-        time.sleep(0.1)
-    image = camera.getImage()
-    cv2.imshow('Test',image)
-    cv2.waitKey(1)
+     main()
   camera.shutdown()

@@ -30,28 +30,29 @@ FRAME_RATE = 20
 PUBLISH_INTERVAL_SECONDS = 1/FRAME_RATE
 
 imageCache = None
+publisher = None
 
 class Publisher(gpb.ImagePublisherServicer):
+    image = None
     def __init__(self):
         self.imageCache = []
         self.stoppingPublisher = False
-        print('Server started')
-
-    def appendCache(self, img):
-        self.imageCache.append(img)
-
+        logger.info('Server started')
+    def setImg(self, img):
+        self.image = img
+        logger.info('image cached on server')
     def shutdown(self):
         self.stoppingPublisher = True
 
     def subscribe(self, request, context):
-        global imageCache
-        print('Publisher:  streaming start')
+        logger.info('Publisher:  streaming start')
         while context.is_active() and not self.stoppingPublisher:
-            if imageCache is None:
+            time.sleep(PUBLISH_INTERVAL_SECONDS)
+            if self.image is None:
                 continue
-            logger.info(f'Image found in cache.')
-            img = imageCache
-            imageCache = None
+            logger.info(f'Image found. Now publishing image')
+            img = self.image
+            self.image = None
             
             data = cv2.imencode('.jpg', img,[cv2.IMWRITE_JPEG_QUALITY, 95,cv2.IMWRITE_JPEG_OPTIMIZE,1])[1].tobytes()
             height, width, channels = img.shape
@@ -59,25 +60,22 @@ class Publisher(gpb.ImagePublisherServicer):
             try:
                 yield robMsg
             except Exception as e:
-                print('Publisher:  failed to send message', e)
+                logger.error(f'Publisher:  failed to send message {e}')
                 break
             time.sleep(PUBLISH_INTERVAL_SECONDS)
-        print('Publisher:  streaming end')
+        logger.warn('Publisher:  streaming end')
 
-def serve():
+def serve(i):
     global publisher, publisherServer
     signal.signal(signal.SIGTERM, lambda signum, frame: exit())
     publisher = Publisher()
     publisherServer = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     gpb.add_ImagePublisherServicer_to_server(publisher, publisherServer)
-    publisherServer.add_insecure_port('[::]:40831')
+    publisherServer.add_insecure_port(f'[::]:4083{i*2+1}')
     publisherServer.start()
-
-def appendCache(img):
-    global imageCache
-    imageCache = img
+    return publisher, publisherServer
 
 def shutdown():
-    print('Server shutdown')
+    logger.warn('Server shutdown')
     publisher.shutdown()
     publisherServer.stop(2)

@@ -39,10 +39,12 @@ precision = False               # if in precision mode or not
 speed = 0.1                     # global speed
 
 chartsLogTime = 10              # Total timespan on chart
-chartUpdateInterval = 0.2       # Interval between data refreshs
+chartUpdateInterval = 0.4       # Interval between data refreshs
 
 JSONPath = './resources/models/'        # Path to where the configuration files for the robots are saved
 EnvironmentPath = './resources/environment/'        # Path to where the environments files are saved
+apiHost = '127.0.0.1'
+apiPort = 8000
 
 class chart:
     """Class to render a chart for a configurable amount of axies"""
@@ -176,31 +178,44 @@ class Axis:
             ui.button('',icon='keyboard_double_arrow_down', on_click=lambda e: self.move(direction.down, self.fastSpeed)).classes(buttonClasses)# Btn down fast
 
 class CaptureApi(FastAPI):
-    port = 8000
-    hostname = '127.0.0.1'
-    def __init__(self) -> None:
+    """Class to receive a camera capture and send it over grpc"""
+    def __init__(self, cameraCount, cameraHeight) -> None:
         super().__init__()
-        self.add_middleware(
+        self.add_middleware(    # Important to allow the api to have a different port
             CORSMiddleware,
             allow_origins=["*"],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
-        self.imCount = 0
-        @self.post('/')
-        async def post(request:Request):
+        self.cameraCount = cameraCount      # Setup Variables for image processing
+        self.cameraHeight = cameraHeight
+        # Setup Servers
+        self.publisherPair:list[tuple[CameraServer.Publisher, CameraServer.grpc.Server]] = [CameraServer.serve(i) for i in range(cameraCount)]
+        self.publishers:list[CameraServer.Publisher] = [publisher for publisher, _ in self.publisherPair]
+        logger.info(f'started {cameraCount} publishers')
 
-            base64Img = await request.body()
-            imgData = base64.decodebytes(base64Img[base64Img.index(b','):])
+        @self.post('/capture/')
+        async def capturePost(request:Request):
+            """Function to parse a post request to the api, decode get the individual images and send the to the grpc server"""
+            base64Img = await request.body()    # Get image data
+            imgData = base64.decodebytes(base64Img[base64Img.index(b','):])     # decode base64 to openCV image
             nparr = np.frombuffer(imgData, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             logger.info('received capture')
-            CameraServer.appendCache(img)
-            #logger.info(f'Appended image to cache, cache size: {len(CameraServer.imageCache)}')
+            for i in range(min(self.cameraCount, len(self.publishers))):        # Crop individual images and send them to the servers
+                height, width, _ = img.shape
+                x, y, w, h = map(int, ((1.0/self.cameraCount) * width * i, (1.0-self.cameraHeight)*height, 1.0/self.cameraCount*width, height*self.cameraHeight))
+                cameraImage = img[y:y+h, x:x+w]
+                self.publishers[i].setImg(cameraImage)      # send image to the server
             return 'Ack'
-    def getCaptureUrl(self):
-        return f'http://{self.hostname}:{self.port}'
+    def shutdown(self):
+        """Function to shut down the grpc servers"""
+        logger.info('shutting captureApi and its servers down')
+        for publisher, publishServer in self.publisherPair:
+            publisher.shutdown()
+            publishServer.stop(2)
+        
 
 class robotDescription:
     """Class to parse and hold all important parameters of the robot"""
@@ -247,7 +262,6 @@ class robotDescription:
             self.AxisGain  = [joint['properties']['gain'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
             self.AxisSteps = [joint['properties']['step'] for joint in ((joints+cartesian) if self.hasJoints else cartesian)]
             jointsOffset = (self.axisCount if self.hasJoints else 0)
-            print(jointsOffset)
             self.rotationAxisCount = len([name for name in self.AxisNames[jointsOffset:] if 'R' in name.upper()])
             self.isCompliant = jsonData['freedrive'] if 'freedrive' in jsonData.keys() else False
             self.id = id
@@ -346,7 +360,6 @@ def renderRobot(robot:robotDescription):
     with ui.column():       # All the charts
         if robotModel.hasJoints:
             jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
-        print(robotModel.AxisNames[robotModel.axisCount:-robotModel.rotationAxisCount])
         XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount if robotModel.hasJoints else 0:-robotModel.rotationAxisCount])
         RChart = chart('', 'Time / s', '', robotModel.AxisNames[-robotModel.rotationAxisCount:])
         
@@ -395,7 +408,8 @@ class Simulation:
         self.capture = state
         
     @ui.refreshable
-    def renderSimulation(self):         
+    def renderSimulation(self):  
+        global captureApi     
         """Funtion for setting up the simulation"""
         if robotModel is None or not robotModel.isInitalized or robotServer.wrongRobot or not robotModel.has3DModel or not robotModel.hasJoints:
             return
@@ -423,11 +437,19 @@ class Simulation:
                         environment.initializeGripper(self, self.scene)         # Initializing gripper if present
                     for _ in range(len(robotModel.files)*2):        # Cleaning up
                         self.scene.stack.pop() 
-                if self.addCameraHelper:
-                    for camera in self.cameras:
+                if self.addCameraHelper:        # Visualizing of cameras
+                    for camera in self.cameras: 
                         self.scene.cameraHelper(camera)
-     
+        
+        CameraCount = self.cameraIndex      # Setup parameters for capture
+        CameraHeight = self.cameraHight
+        self.captureProcess = multiprocessing.Process(target=startApi, args=[CameraCount, CameraHeight])     # Create new Process for api
+        self.captureProcess.start()      # start new process
 
+    def shutdown(self):
+        """Function to shut the capture Process down"""
+        self.captureProcess.kill()
+        
     def addEnvironmentCamera(self, position:list[float], look_at:list[float], fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
         """A Function to add up to three additional cameras to your scene whose parameter can be adjusted and their image is shown in a configurable bottom porch"""
         self.cameraIndex += 1
@@ -444,10 +466,20 @@ class Simulation:
             return
         with self.scene.group() as g:
             g.scale(-1, 1, 1)
-            self.cameras.append(self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=[0, -1, 0], position=[0, 0, 0], fov=fov, focus=focus, far=far, near=near, up=[0, -1, 0])) # Initialize camera with given parameters
+            self.cameras.append(self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0,
+                                                     bottom=0.0,
+                                                     width=1.0/self.cameraIndex, 
+                                                     height=self.cameraHight, 
+                                                     lookat=[0, -1, 0], 
+                                                     position=[0, 0, 0], 
+                                                     fov=fov, 
+                                                     focus=focus, 
+                                                     far=far, 
+                                                     near=near, 
+                                                     up=[0, -1, 0])) # Initialize camera with given parameters
     def update(self) -> None:             
         """Funtion for updating the simulation""" 
-        if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints:
+        if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints: # check if all components have been initialized
             return
         self.jointRotations = [0.0] + list(robotServer.jointsValue)
         jointTypes = ['REVOLUTE'] + robotModel.jointType
@@ -480,7 +512,7 @@ class Simulation:
                 self.grippedObjectProperties = []
                 clone.visible(False)
         if self.capture:
-            self.scene.img(captureApi.getCaptureUrl())     # Request a Frame
+            self.scene.img(f'http://{apiHost}:{apiPort}/capture/')     # Request a Frame
 
 class Robot:                        
     """Class to handle communication with the server"""
@@ -657,16 +689,17 @@ def wrongRobotSelected():
 @ui.page('/robot')
 def robotPage():            
     """Main Interface page"""
-    global robotModel, robotServer, robotSim, captureApi
+    global robotModel, robotServer, robotSim
+    robotPath = ('robotModel-UR3.json', 'UR3')
     if robotPath[0] == '' or robotPath[1] == '':
         return RedirectResponse('/')
     robotModel = robotDescription(path=JSONPath+robotPath[0], id=robotPath[1])      # Setup of the parameters for the robot
     robotServer = Robot()                                                           # Grpc requester and subscriber setup
     robotSim = Simulation()                                                         # Setup of the simulation                                   
     renderRobot(robotModel)                                                         # Renders the Interface
+    app.on_shutdown(shutdown)
 
 robotPath = ('', '')
-captureApi = CaptureApi()
 
 @ui.page('/')               
 def select():
@@ -674,23 +707,16 @@ def select():
     mgr = robotManager()
     mgr.choseRobotDialog.open()
 
-def startApi():
-    CameraServer.serve()
-    logger.info('Done setting up Camera Server')
-    uvicorn.run("main:captureApi", port=captureApi.port, host=captureApi.hostname, log_level="info")
-    #global apiServer
-    #apiServer = uvicorn.Server(config=config)
-    #apiServer.serve()
-if __name__ == '__main__':
-    apiThread = multiprocessing.Process(target=startApi).start()
+def startApi(cameraCount, cameraHeight):
+    captureApi = CaptureApi(cameraCount, cameraHeight)
+    logger.info('Done setting up api, now starting it')
+    uvicorn.run(app=captureApi, port=apiPort, host=apiHost, log_level="info")
 
 def shutdown():
-    #apiServer.shutdown()
-    #robotServer.client.shutdown()
-    #CameraServer.shutdown()
+    robotSim.shutdown()
+    robotServer.client.shutdown()
     pass
 
-app.on_shutdown(shutdown)
 
 ui.run(show=False, title='Robot Interface')
 

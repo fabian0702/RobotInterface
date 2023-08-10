@@ -27,6 +27,7 @@ def initialize(self:sim, scene:ui.scene):
         There are also some optional parameters of the camera such as fov or focus.
         Please adjust ```self.gripThreshold``` to your desired Value, usually 0.004 works well but may need to be adjusted to suit your needs.
     """
+    self.addCameraHelper = False
     self.environmentData |= {'startTime':time.time()}
 
     self.addEnvironmentCamera([0, 0, 5], [0, 0, 0])

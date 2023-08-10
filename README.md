@@ -8,7 +8,7 @@ Please follow the steps in the ```/Python-main/README.md``` to install the BFH-H
 ## Starting the interface
 To start the interface run:
 ```
-python3 robotUI.py
+python3 main.py
 ``` 
 which will give you a link in the console to open the ui
 

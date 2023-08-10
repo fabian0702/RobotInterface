@@ -25,6 +25,12 @@ from ch.bfh.roboticsLab.util.Logger import Logger
 from ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatix
 import environment
 import CameraServer
+import sys
+
+if len(sys.argv) > 1:
+    clientAdress = sys.argv[1]  # The address of the grpc server
+else:
+    clientAdress = 'localhost'
 
 logger = Logger('main').getInstance()        # Setup Logger
 
@@ -33,7 +39,7 @@ class direction:
     up = 1
     down = -1
 
-clientAdress = '192.168.0.100'  # The address of the grpc server
+
 
 precision = False               # if in precision mode or not
 speed = 0.1                     # global speed
@@ -70,7 +76,8 @@ class chart:
         """Function to render the chart"""
         self.chartUpdateTimer = ui.timer(chartUpdateInterval, self.updateData, active=False)        # setup refresh timer
         self.plot:ui.line_plot = ui.line_plot(n=len(self.graphNames), limit=self.maxIndex-1, figsize=(6, 2)).with_legend(self.graphNames, loc='upper right')        # plot
-        #self.plot.fig.gca().set_xticklabels([])
+        self.plot.fig.text(0.5, 0.03, self.xaxisName, ha='center', va='center')
+        self.plot.fig.text(0.1, 0.95, self.yaxisName, ha='center', va='center')
         plt.grid(axis = 'x')        # grid
     
     def updateData(self,):
@@ -346,23 +353,39 @@ def renderRobot(robot:robotDescription):
                     robotServer.registerUpdateCallback(a.updatePosition)        # Registering the nessecary callbacks for updating the position values
     
         with ui.card().classes('filter-none bg-slate-500 text-center items-center my-3'):       # Buttons to show the charts or hide the simulation
-            ui.label('Charts').classes('mb-[-0.6em] mt-[-0.4em] text-white')
+            ui.label('Charts and Simulation').classes('mb-[-0.6em] mt-[-0.4em] text-white')
             with ui.row():
                 if robotModel.hasJoints:
                     jChartBtn = toggleButton('J', tooltip='Displays a chart with all the joints')
                 XChartBtn = toggleButton('X', tooltip='Displays a chart with all the linear axis')
                 RChartBtn = toggleButton('R', tooltip='Displays a chart with all the rotation axis')
                 AllChartsBtn = toggleButton('', icon='done_all', tooltip='Displays a chart with all joints and axies')
+                
+                # with ui.dialog() as chartsTimeChangeDialog, ui.card().style('width:25%'):        # dialog to change the speed on certain robots
+                #     ui.label('Change timeduration:').classes('text-2xl')
+                #     timeLabel = ui.label(f'Time: {speed} s').classes('mt-[-1em]')
+                #     timeSlider = ui.slider(min=5, max=60, step=0.01, value=speed, on_change=lambda e: timeLabel.set_text(f'Time: {speed} s')).bind_value(globals(), 'chartsLogTime')
+                #     ui.button('Close', on_click=chartsTimeChangeDialog.close)
+                # ui.button('', icon='speed', on_click=chartsTimeChangeDialog.open).tooltip("Opens a dialog to set the duration the charts display").classes('px-5 m-[-0.2em] text-white')   # Button to speed change dialog
+
+
                 SimulationBtn = toggleButton('', icon='view_in_ar', tooltip='Hides the 3D simulation', on_change=robotSim.changeVisibility)
                 CaptureBtn = toggleButton('', icon='videocam', tooltip='Starts capturing a video stream', on_change=robotSim.changeCapture)
                 SimulationBtn.handlePress(state=True, suppress=True)
-                
+     
     with ui.column():       # All the charts
         if robotModel.hasJoints:
-            jChart = chart('', 'Time / s', '', robotModel.AxisNames[:robotModel.axisCount])
-        XChart = chart('', 'Time / s', '', robotModel.AxisNames[robotModel.axisCount if robotModel.hasJoints else 0:-robotModel.rotationAxisCount])
-        RChart = chart('', 'Time / s', '', robotModel.AxisNames[-robotModel.rotationAxisCount:])
-        
+            jChart = chart('', 'Time / s', 'Rotation / °', robotModel.AxisNames[:robotModel.axisCount])
+        XChart = chart('', 'Time / s', 'Position / m', robotModel.AxisNames[robotModel.axisCount if robotModel.hasJoints else 0:-robotModel.rotationAxisCount])
+        RChart = chart('', 'Time / s', 'Rotation / °', robotModel.AxisNames[-robotModel.rotationAxisCount:])
+    
+    #def refreshCharts():
+    #    if robotModel.hasJoints:
+    #        jChart.chart.refresh()
+    #    XChart.chart.refresh()
+    #    RChart.chart.refresh()
+    #timeSlider.on('change', refreshCharts)
+
     def allChartsVisible(visible):
         """makes all charts visible"""
         if robotModel.hasJoints:
@@ -690,7 +713,6 @@ def wrongRobotSelected():
 def robotPage():            
     """Main Interface page"""
     global robotModel, robotServer, robotSim
-    robotPath = ('robotModel-UR3.json', 'UR3')
     if robotPath[0] == '' or robotPath[1] == '':
         return RedirectResponse('/')
     robotModel = robotDescription(path=JSONPath+robotPath[0], id=robotPath[1])      # Setup of the parameters for the robot
@@ -718,8 +740,4 @@ def shutdown():
     pass
 
 
-ui.run(show=False, title='Robot Interface')
-
-# TODO:
-# - add labels to charts
-# - add labels to charts
+ui.run(show=True, title='Robot Interface')

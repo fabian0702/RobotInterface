@@ -27,7 +27,7 @@ import environment
 import CameraServer
 import sys
 
-if len(sys.argv) > 1:
+if len(sys.argv) > 1:  
     clientAdress = sys.argv[1]  # The address of the grpc server
 else:
     clientAdress = 'localhost'
@@ -439,7 +439,7 @@ class Simulation:
         with ui.right_drawer().props('width=auto') as self.simulationDrawer:
             with ui.scene(width=700, height=950).classes('m-[-1em]') as self.scene:
                 with self.scene.group() as group:
-                    group.rotate(0,0,0.685)
+                    #group.rotate(np.pi,0,0)
                     environment.initialize(self, self.scene)    # Initializing of the scene
 
                     for obj in self.graspableObjects:       # preparation for highlightes objects
@@ -447,15 +447,15 @@ class Simulation:
 
                     lastOffset = [0.0, 0.0, 0.0]
                     self.links:list[ui.scene.group] = []
-                    group.scale(-3.5)
+                    group.scale(3.5)
                     for i, file in enumerate(robotModel.files):         # Adds all links to the robot
-                        self.scene.stack.append(self.scene.group())              
+                        self.scene.stack.append(self.scene.group()) 
+                        self.scene.stack[-1].rotate(*robotModel.globalSimulationRotation[i])             
                         self.scene.stack[-1].move(*(-np.array(robotModel.offsets[i]) + np.array(lastOffset)))
                         lastOffset = robotModel.offsets[i]
                         self.links.append(self.scene.group())  
                         self.scene.stack.append(self.links[-1])   
                         self.scene.gltf(f'/static/{robotModel.id}/'+file, scale=0.001, offset=robotModel.offsets[i])
-                    
                     with self.scene.group() as self.environmentGroupMoving:
                         environment.initializeGripper(self, self.scene)         # Initializing gripper if present
                     for _ in range(len(robotModel.files)*2):        # Cleaning up
@@ -508,19 +508,29 @@ class Simulation:
         jointTypes = ['REVOLUTE'] + robotModel.jointType
         for i, link in enumerate(self.links):       # Exclude Base
             if jointTypes[i] == 'REVOLUTE':         # Update robot joints
-                link.rotate(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i] + robotModel.globalSimulationRotation[i]))
+                link.rotate(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i]))
             else:
                 link.move(*list(robotModel.jointLookupMatrix[i] * self.jointRotations[i] + robotModel.globalSimulationRotation[i]))
         environment.update(self, robotServer, robotModel)       # Update Environment
         if robotServer.gripper > 0.5:                
             for property, obj in zip(self.grippedObjectProperties, self.grippedObjects):        # Handle gripped objects
-                obj.move(robotServer.Cartesian[0]+property[0][0]-property[2][0], robotServer.Cartesian[1]+property[0][1]-property[2][1], -robotServer.Cartesian[2]+property[0][2]+property[2][2])
-                matRot = Object3D.rotation_matrix_from_euler((robotServer.Cartesian[3] - property[2][3]), (robotServer.Cartesian[4] - property[2][4]), (robotServer.Cartesian[5] - property[2][5]))
-                matNew = np.matmul(np.array(matRot), np.array(property[1]))
-                obj.R = list(map(list, matNew))
+                intialRotation = rowan.from_euler(*property[2][3:], 'xyz')
+                intialPosition = property[2][:3]
+
+                desiredRotation = rowan.from_euler(*robotServer.Cartesian[3:], 'xyz')
+                desiredPosition = robotServer.Cartesian[:3]
+
+                intialObjectRotation = rowan.from_matrix(np.array(property[1]))
+                intialObjectPosition = property[0]
+
+                relativeObjectTransform = TransformationMatix.compose((desiredPosition-intialPosition)+intialObjectPosition, rowan.multiply(rowan.inverse(rowan.divide(desiredRotation, intialRotation)), intialObjectRotation))
+                
+                obj.move(*relativeObjectTransform.decomposeNumpy()[0])
+                
+                obj.R = list(map(list, relativeObjectTransform.T[:3, :3]))
                 obj._rotate()
         for i, obj, clone in zip(range(len(self.graspableObjects)), self.graspableObjects, self.highlightedObjects):
-            if sum([(obj.x-robotServer.Cartesian[0])**2, (obj.y-robotServer.Cartesian[1])**2, (obj.z+robotServer.Cartesian[2])**2]) < self.gripThreshold:   # Check if object if close enough to be gripped
+            if sum([(obj.x-robotServer.Cartesian[0])**2, (obj.y-robotServer.Cartesian[1])**2, (obj.z-robotServer.Cartesian[2])**2]) < self.gripThreshold:   # Check if object if close enough to be gripped
                 if robotServer.gripper > 0.5:
                     if len(self.grippedObjects) == 0:       # Grip objects if gripper has just been turned on
                         self.grippedObjects.append(obj)
@@ -530,7 +540,7 @@ class Simulation:
                 clone.rotate_R(obj.R)
                 clone.material(self.grippedColor if robotServer.gripper > 0.5 else self.grippercloseColor)
                 clone.visible(True)
-            else:
+            elif len(self.grippedObjects) > 0 and not robotServer.gripper > 0.5:
                 self.grippedObjects = []                # reset highlight
                 self.grippedObjectProperties = []
                 clone.visible(False)
@@ -594,7 +604,7 @@ class Robot:
             return
         axisIndex = robotModel.getAxisIndex(axisName)
         pose = [0] * robotModel.axisCount
-        pose[axisIndex%robotModel.axisCount] = distance * -(0.1 if precision else 1) * (robotModel.AxisSteps[axisIndex] if not absolute else 1) / robotModel.AxisGain[axisIndex]
+        pose[axisIndex%robotModel.axisCount] = distance * (0.1 if precision else 1) * (robotModel.AxisSteps[axisIndex] if not absolute else 1) / robotModel.AxisGain[axisIndex]
         return self.moveCartesian(pose)
     
     def changeGripperState(self, state:bool):
@@ -624,10 +634,12 @@ class Robot:
         """Moves the Axis to a absolute position specified in the pose list as radians"""
         if self.robotPose is not None:
             actualPose = TransformationMatix.fromPose(self.robotPose)       # Initial Pose of the robot
-            offset = TransformationMatix.compose(pose[:3],rowan.from_euler(pose[robotModel.getAxisIndex('RZ')-robotModel.axisCount] if 'RZ' in robotModel.AxisNames else 0.0,   # new Transformation to apply
+            newRotation = rowan.from_euler(pose[robotModel.getAxisIndex('RZ')-robotModel.axisCount] if 'RZ' in robotModel.AxisNames else 0.0,   # new Transformation to apply
                                                                            pose[robotModel.getAxisIndex('RY')-robotModel.axisCount] if 'RY' in robotModel.AxisNames else 0.0, 
-                                                                           pose[robotModel.getAxisIndex('RX')-robotModel.axisCount] if 'RX' in robotModel.AxisNames else 0.0,'zyx'))
-            newPose = actualPose*offset            
+                                                                           pose[robotModel.getAxisIndex('RX')-robotModel.axisCount] if 'RX' in robotModel.AxisNames else 0.0,'zyx')
+            offset = TransformationMatix.compose(pose[:3],[1,0,0,0])
+            offset2 = TransformationMatix.compose([0,0,0],newRotation)
+            newPose = offset*actualPose*offset2            
             robotServer.client.moveCartesian(pose=newPose.pose(),override=speed)        # Move the robot to the new pose
     def registerUpdateCallback(self, callback:lambda:None):     
         """Function to register a callback for the process subscription"""
@@ -740,4 +752,4 @@ def shutdown():
     pass
 
 
-ui.run(show=True, title='Robot Interface')
+ui.run(show=False, title='Robot Interface')

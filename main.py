@@ -481,6 +481,7 @@ class Simulation:
         with self.scene.group() as g:
             g.scale(1, 1, -1)
             self.cameras.append(self.scene.subCamera(left=1.0/self.cameraIndex if self.cameraIndex > 1 else 0.0, bottom=0.0, width=1.0/self.cameraIndex, height=self.cameraHight, lookat=look_at, position=position, fov=fov, focus=focus, far=far, near=near)) # Initialize camera with given parameters
+        return self.cameras[-1]
 
     def addGripperCamera(self, fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> None:
         """A Function to add up to three additional cameras to your scene whose parameter can be adjusted and their image is shown in a configurable bottom porch"""
@@ -500,6 +501,7 @@ class Simulation:
                                                      far=far, 
                                                      near=near, 
                                                      up=[0, -1, 0])) # Initialize camera with given parameters
+        return self.cameras[-1]
     def update(self) -> None:             
         """Funtion for updating the simulation""" 
         if robotServer.client is None or robotServer.jointsValue is None or not robotModel.has3DModel or not robotModel.hasJoints: # check if all components have been initialized
@@ -540,7 +542,7 @@ class Simulation:
                 clone.rotate_R(obj.R)
                 clone.material(self.grippedColor if robotServer.gripper > 0.5 else self.grippercloseColor)
                 clone.visible(True)
-            elif len(self.grippedObjects) > 0 and not robotServer.gripper > 0.5:
+            elif robotServer.gripper < 0.5:
                 self.grippedObjects = []                # reset highlight
                 self.grippedObjectProperties = []
                 clone.visible(False)
@@ -674,7 +676,6 @@ class Robot:
             newEuler = rowan.to_euler(newOrientation)
             self.Cartesian = np.concatenate((newPosition, newEuler[::-1]))
             self.currentTime = time.time()
-
             for callback in self.callbacks:
                 callback()
         except Exception as e:

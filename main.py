@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+
+# RobotInterface
+
+# This is a Interface/Simulator for robots written on the BFH HuCE Framework and Nicegui
+# @author: Loris Hirter
+
 import time
 import rowan
 import math

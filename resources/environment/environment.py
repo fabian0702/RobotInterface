@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+
+# environment
+
+# This is the environment python file which defines the environment for the Simulator
+# @author: Loris Hirter
+
 from nicegui.elements.scene_object3d import Object3D
 from nicegui import ui
 import time, math

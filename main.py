@@ -367,15 +367,6 @@ def renderRobot(robot:robotDescription):
                 XChartBtn = toggleButton('X', tooltip='Displays a chart with all the linear axis')
                 RChartBtn = toggleButton('R', tooltip='Displays a chart with all the rotation axis')
                 AllChartsBtn = toggleButton('', icon='done_all', tooltip='Displays a chart with all joints and axies')
-                
-                # with ui.dialog() as chartsTimeChangeDialog, ui.card().style('width:25%'):        # dialog to change the speed on certain robots
-                #     ui.label('Change timeduration:').classes('text-2xl')
-                #     timeLabel = ui.label(f'Time: {speed} s').classes('mt-[-1em]')
-                #     timeSlider = ui.slider(min=5, max=60, step=0.01, value=speed, on_change=lambda e: timeLabel.set_text(f'Time: {speed} s')).bind_value(globals(), 'chartsLogTime')
-                #     ui.button('Close', on_click=chartsTimeChangeDialog.close)
-                # ui.button('', icon='speed', on_click=chartsTimeChangeDialog.open).tooltip("Opens a dialog to set the duration the charts display").classes('px-5 m-[-0.2em] text-white')   # Button to speed change dialog
-
-
                 SimulationBtn = toggleButton('', icon='view_in_ar', tooltip='Hides the 3D simulation', on_change=robotSim.changeVisibility)
                 CaptureBtn = toggleButton('', icon='videocam', tooltip='Starts capturing a video stream', on_change=robotSim.changeCapture)
                 SimulationBtn.handlePress(state=True, suppress=True)
@@ -385,13 +376,6 @@ def renderRobot(robot:robotDescription):
             jChart = chart('', 'Time / s', 'Rotation / °', robotModel.AxisNames[:robotModel.axisCount])
         XChart = chart('', 'Time / s', 'Position / m', robotModel.AxisNames[robotModel.axisCount if robotModel.hasJoints else 0:-robotModel.rotationAxisCount])
         RChart = chart('', 'Time / s', 'Rotation / °', robotModel.AxisNames[-robotModel.rotationAxisCount:])
-    
-    #def refreshCharts():
-    #    if robotModel.hasJoints:
-    #        jChart.chart.refresh()
-    #    XChart.chart.refresh()
-    #    RChart.chart.refresh()
-    #timeSlider.on('change', refreshCharts)
 
     def allChartsVisible(visible):
         """makes all charts visible"""

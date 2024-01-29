@@ -1,4 +1,5 @@
 # Robotinterface
+A interactive Interface based on the BFH HUcE Framework to controll robots via grpc. This Project is able to simulate robots locally or controll robots over the internet, while being able to define custom scenes and receive live camera feed from the simulation.
 ## Setup
 To install all necessary python packages run 
 ```

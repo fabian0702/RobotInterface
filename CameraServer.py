@@ -18,7 +18,7 @@ import grpc
 from concurrent import futures
 
 
-path.append('./Python-main/')
+path.append('./python_main/')
 from ch.bfh.roboticsLab.vision import Vision_pb2 as pb
 from ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpb
 from ch.bfh.roboticsLab.util.Logger import Logger
@@ -29,13 +29,11 @@ logger = Logger('CameraServer').getInstance()
 FRAME_RATE = 20
 PUBLISH_INTERVAL_SECONDS = 1/FRAME_RATE
 
-imageCache = None
 publisher = None
 
 class Publisher(gpb.ImagePublisherServicer):
     image = None
     def __init__(self):
-        self.imageCache = []
         self.stoppingPublisher = False
         logger.info('Server started')
     def setImg(self, img):

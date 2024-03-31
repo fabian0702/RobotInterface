@@ -2,18 +2,12 @@ from nicegui.elements.scene_object3d import Object3D
 from nicegui import ui
 import time, math
 
-class sim:
-    graspableObjects:list[Object3D]
-    staticObjects:list[Object3D]
-    environmentData:dict
-    gripThreshold:float = 0.004
-    highlightColor:str = '#0088ff'
-    addCameraHelper:bool = True
+class Simulation:
+    pass
 
-    def addEnvironmentCamera(self, position:list[float], look_at:list[float], fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> Object3D:
-        pass
-    def addGripperCamera(self, fov:float = 75, focus:float = 10, far:float=1000, near:float=0.1) -> Object3D:
-        pass
+
+UPDATE_CLONES = True # wether to update the clones once every simulation cycle or just update them when a object is moved by a robot.
+                     # updating constantly may impact performace negativly especially with a lot of graspable objects.
 
 GRIPPER_LENGTH = 0.10
 # Wafer diameter in inches (try to use only standard sizes)
@@ -55,10 +49,13 @@ def createRack(scene:ui.scene, color:str=redMaterial):
                 board.move(board.x, y, z)
     return rack
 
-def createWaver(scene:ui.scene, color:str=blackMaterial):
-    return scene.cylinder(WAFER_RADIUS_M, WAFER_RADIUS_M, 0.001, 32).material(blackMaterial)
+def gripperMove(position: float):
+    print(f'gripper moved to {position}!!!')
 
-def initialize(self:sim, scene:ui.scene):
+def createWaver(scene:ui.scene, color:str=blackMaterial):
+    return scene.cylinder(WAFER_RADIUS_M, WAFER_RADIUS_M, 0.001, 32).material(color)
+
+def initialize(self:Simulation, scene:ui.scene):
     """
         This Function will initialize the environment of the simulation.
         When you create an object which can be grasp please append it to the ```self.graspableObjects``` list to be able to access it in the update method.
@@ -69,19 +66,20 @@ def initialize(self:sim, scene:ui.scene):
         If you want up to three additional cameras, call ```self.addEnvironmentCamera``` with the desired position and look_at as the point for the camera to face.
         There are also some optional parameters of the camera such as fov or focus.
         Please adjust ```self.gripThreshold``` to your desired Value, usually 0.004 works well but may need to be adjusted to suit your needs.
+        If you have moving objects which can be picked up by a robot, you might consider turing updateClones on as this ensures the highlights follow accuratly even on movin object.
+        In scenes with a lot of graspable object you might experience some performace penalty by using this setting.
     """
+    self.updateClones = True
     self.gripThreshold = 0.01
     # Blue -> Output
 
-    self.addCameraHelper = True
+    #self.addCameraHelper = True
     self.environmentData |= {'startTime':time.time()}
 
-    camera = scene.gltf('/static/environment/camera.glb', scale=1, offset=[0.22, 0.0, 0.0])
+    # camera = scene.gltf('/static/environment/camera.glb', scale=1, offset=[0.22, 0.0, 0.0])
 
-
-    with scene.group() as cameraGroup:
-        cameraGroup.move(0.22, 0.0, 0.0)
-        self.addEnvironmentCamera([0.0, 0, 0], [0.0, 0, -1], 30)
+    self.addEnvironmentCamera(0, 1.8, 3)
+    self.addGripperCamera(0, -1.8, 3)
 
     rackLeft = createRack(scene, blueMaterial)
     rackLeft.move(0.20, -0.20, 0.0)
@@ -90,7 +88,7 @@ def initialize(self:sim, scene:ui.scene):
     rackRight.move(0.20, 0.20, 0.0)
     rackRight.rotate(0, 0, math.pi / 4.0)
 
-    for z in [0.27, 0.29, 0.31, 0.33]:
+    for z in [0.27, 0.29]:#, 0.31, 0.33]:
         waver = createWaver(scene, blackMaterial)
         waver.move(0.18, 0.19+RACK_WIDTH/2, z+0.002)
         waver.rotate(math.pi / 2.0, 0.0, 0.0)
@@ -98,7 +96,7 @@ def initialize(self:sim, scene:ui.scene):
 
     pass
 
-def initializeGripper(self:sim, scene:ui.scene):
+def initializeGripper(self:Simulation, scene:ui.scene):
     """
         In this function you can add your own gripper to robot.
         If you want variables you can also access in the update funcion use global variabels or append the data you want to store to the ```self.environmentData``` dict.
@@ -120,7 +118,7 @@ def initializeGripper(self:sim, scene:ui.scene):
         base.rotate(math.pi / 2.0, 0.0, 0.0)
         base.move(0, 0, -0.01)
     pass
-def update(self:sim, robotServer, robotModel):
+def update(self:Simulation, robotServer, robotModel):
     """ 
         This Function updates the environment for the simulation and will be called after every renderingcycle of the robot.
         To access data about the robot, use ```robotServer.JointsValue``` to get the rotation of the Joints or use ```robotServer.Cartesian``` to get the Cartesian pose from the robot.

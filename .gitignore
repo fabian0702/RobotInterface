@@ -8,3 +8,5 @@
 resources/environment/__pycache__/environment.cpython-310.pyc
 __pycache__/CameraServer.cpython-310.pyc
 __pycache__/main.cpython-310.pyc
+python_main/ch/bfh/roboticsLab/robot/RobotSimulator copy.py
+.gitignore

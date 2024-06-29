@@ -70,6 +70,26 @@ export default {
             dynamicObject.quaternion.multiply(staticWorldQuaternion);
             return [dynamicObject.position, dynamicObject.quaternion.normalize()];
         },
+        getWorldTransform(objectID, sceneID) {
+            const parent = getElement(sceneID);
+            if (parent === undefined) {
+                return [new THREE.Vector3(), new THREE.Quaternion()];
+            }
+            var object = parent.objects.get(objectID),
+                worldPosition = new THREE.Vector3(),
+                worldQuaternion = new THREE.Quaternion();
+
+            if (object === undefined) {
+                return [worldPosition, worldQuaternion.normalize()]
+            }
+
+            object.updateMatrixWorld(true);
+
+            object.getWorldPosition(worldPosition);
+            object.getWorldQuaternion(worldQuaternion);
+
+            return [worldPosition, worldQuaternion.normalize()]
+        }, 
         calcDistance(objectID1, objectID2, sceneID) {
             const parent = getElement(sceneID);
             if (parent === undefined) {
@@ -95,6 +115,7 @@ export default {
                 console.warn(`scene with id ${sceneID} not found.`);
                 return '';
             }
+            console.log(parent)
             if (!image_buffer.has(sceneID)) {
                 const originalRender = parent.renderer.render.bind(parent.renderer);
 
@@ -110,13 +131,16 @@ export default {
             let scene = getElement(sceneID);
             let camera = scene.camera;
             let helper = new THREE.CameraHelper(camera);
+            helper.geometry.setDrawRange(0, 38);
             scene.scene.add(helper);
         },
-        attachCamera(sceneID, groupID) {
+        attachCamera(sceneID, cameraID, groupID) {
             let scene = getElement(sceneID);
             let group = scene?.objects?.get(groupID);
-            let camera = scene?.camera;
-            
+            let camera = getElement(cameraID)?.camera;
+
+            console.log(group, camera, scene.objects);
+
             if (group === undefined || camera === undefined) {
                 return false;
             }

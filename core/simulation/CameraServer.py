@@ -5,25 +5,26 @@ BFH roboticsLab python IDS camera interface.
 @author gionata.quadri@bfh.ch
 
 Installation requirements:
-> python3 -m pip install pyueye grpcio grpcio-tools numpy
+> python3 -m pip install pyueye grpcio grpcio-tools
 '''
 
 #Libraries
 import cv2
 import signal
-import numpy as np
 import time
-from sys import path
 import grpc
+import os
 from concurrent import futures
 
+from sys import path
+path.append('../../python_main/')
+from python_main.ch.bfh.roboticsLab.vision import Vision_pb2 as pb
+from python_main.ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpb
+from python_main.ch.bfh.roboticsLab.util.Logger import Logger
 
-path.append('./python_main/')
-from ch.bfh.roboticsLab.vision import Vision_pb2 as pb
-from ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpb
-from ch.bfh.roboticsLab.util.Logger import Logger
+from ..constants import LOG_LEVEL
 
-logger = Logger('CameraServer').getInstance()
+logger = Logger(os.path.basename(__file__), LOG_LEVEL).getInstance()
 
 # The delay between two publisher messages
 FRAME_RATE = 20
@@ -38,7 +39,7 @@ class Publisher(gpb.ImagePublisherServicer):
         logger.info('Server started')
     def setImg(self, img):
         self.image = img
-        logger.info('image cached on server')
+        logger.debug('image cached on server')
     def shutdown(self):
         self.stoppingPublisher = True
 

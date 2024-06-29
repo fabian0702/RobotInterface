@@ -1,12 +1,13 @@
 /Common_packages-main-Web
 /Common_packages-main-Web.zip
-/JSparser.ipynb
+/core/__pycache__/
+/core/components/__pycache__/
 /Python-main.zip
-/testRender copy.py
-/testRender.py
-/ikin.py
-resources/environment/__pycache__/environment.cpython-310.pyc
-__pycache__/CameraServer.cpython-310.pyc
-__pycache__/main.cpython-310.pyc
+/tests/
+resources/environment/__pycache__/
+__pycache__/
 python_main/ch/bfh/roboticsLab/robot/RobotSimulator copy.py
 .gitignore
+.vscode/
+/core/kinematics/
+/resources/environment/__pycache__/

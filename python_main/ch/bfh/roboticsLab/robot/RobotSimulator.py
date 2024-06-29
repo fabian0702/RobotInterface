@@ -14,6 +14,7 @@ from sys import argv, path
 import os
 import logging
 path.append('../../../../')
+path.append('./python_main/')
 
 from ch.bfh.roboticsLab import Base_pb2 as pbBase
 from ch.bfh.roboticsLab.robot import RobotControl_pb2 as pbRobotControl
@@ -234,8 +235,8 @@ class Robot(gpbRobotControl.ResponderServicer, gpbRobotControl.PublisherServicer
         self.logger.debug(f'_executionLoop: MoveCartesian done: {self.pose}')
       elif self.command.HasField('grip'):
         self.gripperPosition = self.command.grip.position
-      elif self.command.HasField('free'):
-        self.logger.debug(f'Freedrive: {self.command.digitalOutput}')
+      #elif self.command.HasField('free'):
+      #  self.logger.debug(f'Freedrive: {self.command.digitalOutput}')
       elif self.command.HasField('digitalOutput'):
         self.logger.debug(f'DigitalOutputs: {self.command.digitalOutput}')
 

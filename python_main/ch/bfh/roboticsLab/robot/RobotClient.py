@@ -31,9 +31,9 @@ def processSubscription(published:pbRobotControl.Published) -> None:
   pass
 
 class RobotClient():
-  '''! This class implements a Robot Client.
+  '''This class implements a Robot Client.
   Usage example:
-  @code{python}
+  ```py
     # Define your own subscription processing callback.
     def myProcessSubscription(published:pbRobotControl.Published) -> None:
       print(f'myProcessSubscription: Got: {published}')
@@ -67,7 +67,7 @@ class RobotClient():
 
     client.shutdown()
     exit(0)
-  @endcode
+  ```
   '''
 
   def __init__(self, host: str, processSubscription:Callable[[pbRobotControl.Published], None]=processSubscription):

@@ -6,7 +6,7 @@ from core.constants import direction, LOG_LEVEL
 from core.server import RobotServer
 from core.model import RobotModel
 
-from python_main.ch.bfh.roboticsLab.util.Logger import Logger
+from Python.ch.bfh.roboticsLab.util.Logger import Logger
 
 logger = Logger(os.path.basename(__file__), LOG_LEVEL).getInstance()
 

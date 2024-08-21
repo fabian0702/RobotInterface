@@ -3,6 +3,7 @@ import json
 from core.args import args
 
 import logging
+from Python.ch.bfh.roboticsLab.util.Logger import Level
 
 class direction: 
     """Data class to store direction"""   
@@ -13,7 +14,7 @@ SERVER_ADDRESS = 'localhost' if 'local_server' in args else args.server_host   #
 START_SERVER = 'local_server' in args or True      # Wether to start a local server
 CLIENT_PORT = args.client_port             # Port for the nicegui application
 
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = Level.INFO
 
 CHART_LOG_TIME = 10               # Total timespan on chart
 CHART_UPDATE_INTERVAL = 0.4       # Interval between data refreshs

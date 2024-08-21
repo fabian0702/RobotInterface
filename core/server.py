@@ -2,23 +2,17 @@ from nicegui import ui, app
 import rowan, time, os
 import numpy as np
 
-from multiprocessing import Process
-
-import python_main.ch.bfh.roboticsLab.robot.RobotSimulator as RobotSimulator
-from python_main.ch.bfh.roboticsLab.util.Logger import Logger
-import logging
+import Python.ch.bfh.roboticsLab.robot.RobotSimulator as RobotSimulator
+from Python.ch.bfh.roboticsLab.util.Logger import Logger
 
 from core.model import RobotModel
 from core.constants import SERVER_ADDRESS, START_SERVER, LOG_LEVEL
 logger = Logger(os.path.basename(__file__), LOG_LEVEL).getInstance()
 
-from sys import path
-path.append('./python_main/')
-
-from python_main.ch.bfh.roboticsLab.robot.RobotClient import RobotClient
-from python_main.ch.bfh.roboticsLab import Base_pb2 as pbBase
-from python_main.ch.bfh.roboticsLab.robot import RobotControl_pb2 as pbRobotControl
-from python_main.ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatix
+from Python.ch.bfh.roboticsLab.robot.RobotClient import RobotClient
+from Python.ch.bfh.roboticsLab import Base_pb2 as pbBase
+from Python.ch.bfh.roboticsLab.robot import RobotControl_pb2 as pbRobotControl
+from Python.ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatrix
 
 class RobotServer:
     """Class to handle communication with the server"""
@@ -44,14 +38,10 @@ class RobotServer:
         self.max_tolerance = pbBase.LinearAngularPair(linear = robotModel.maxLinearTolerance, angular=robotModel.maxAngularTolerance)
         self.callbacks = []
 
-        def startServer(axis_count, logger:Logger):
-            pass
-
         try:
             self.local_server = None
             if START_SERVER:
                 self.local_server = RobotSimulator.Robot(self.robotModel.axisCount)
-                #self.local_server.start()
         except RuntimeError as e:
             with ui.dialog() as self.invalideMoveDialog, ui.card().classes('w-1/4'):          # Dialog to display errormessage when freedrive is enabled but the robot is commanded to move
                 ui.label("Unable to start a simulation server. This is most likely because there is already another server running.")
@@ -131,12 +121,12 @@ class RobotServer:
     def moveCartesian(self, pose:list[int]):
         """Moves the Axis to a absolute position specified in the pose list as radians"""
         if self.robotPose is not None:
-            actualPose = TransformationMatix.fromPose(self.robotPose)       # Initial Pose of the robot
+            actualPose = TransformationMatrix.fromPose(self.robotPose)       # Initial Pose of the robot
             newRotation = rowan.from_euler(pose[self.robotModel.getAxisIndex('RZ')-self.robotModel.axisCount] if 'RZ' in self.robotModel.AxisNames else 0.0,   # new Transformation to apply
                                            pose[self.robotModel.getAxisIndex('RY')-self.robotModel.axisCount] if 'RY' in self.robotModel.AxisNames else 0.0, 
                                            pose[self.robotModel.getAxisIndex('RX')-self.robotModel.axisCount] if 'RX' in self.robotModel.AxisNames else 0.0,'zyx')
-            offset = TransformationMatix.compose(pose[:3],[1,0,0,0])
-            offset2 = TransformationMatix.compose([0,0,0],newRotation)
+            offset = TransformationMatrix.compose(pose[:3],[1,0,0,0])
+            offset2 = TransformationMatrix.compose([0,0,0],newRotation)
             newPose = offset*actualPose*offset2            
             self.client.moveCartesian(pose=newPose.pose(), override=self.speed)        # Move the robot to the new pose
     def registerUpdateCallback(self, callback:lambda:None):     
@@ -168,7 +158,7 @@ class RobotServer:
                 self.initializedAxis = True
                 if self.on_initialized is not None:
                     self.on_initialized()
-            newPosition, newOrientation = TransformationMatix.fromPose(self.robotPose).decomposeNumpy()
+            newPosition, newOrientation = TransformationMatrix.fromPose(self.robotPose).decomposeNumpy()
             newEuler = rowan.to_euler(newOrientation)
             self.Cartesian = np.concatenate((newPosition, newEuler[::-1]))
             self.currentTime = time.time()

@@ -29,7 +29,7 @@ from core.server import RobotServer
 
 from resources.environment import environment
 
-from python_main.ch.bfh.roboticsLab.util.Logger import Logger
+from Python.ch.bfh.roboticsLab.util.Logger import Logger
 
 @dataclass
 class CameraProperties:

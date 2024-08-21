@@ -17,10 +17,10 @@ import os
 from concurrent import futures
 
 from sys import path
-path.append('../../python_main/')
-from python_main.ch.bfh.roboticsLab.vision import Vision_pb2 as pb
-from python_main.ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpb
-from python_main.ch.bfh.roboticsLab.util.Logger import Logger
+path.append('../../Python/')
+from Python.ch.bfh.roboticsLab.vision import Vision_pb2 as pb
+from Python.ch.bfh.roboticsLab.vision import Vision_pb2_grpc as gpb
+from Python.ch.bfh.roboticsLab.util.Logger import Logger
 
 from ..constants import LOG_LEVEL
 

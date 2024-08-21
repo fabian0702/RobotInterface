@@ -3,10 +3,10 @@ import numpy as np
 import os, asyncio
 
 from sys import path
-path.append('./python_main/')
+path.append('./Python/')
 
-from python_main.ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatix
-from python_main.ch.bfh.roboticsLab.util.Logger import Logger
+from Python.ch.bfh.roboticsLab.util.TransformationMatrix import TransformationMatrix
+from Python.ch.bfh.roboticsLab.util.Logger import Logger
 
 from core.model import RobotModel
 from core.server import RobotServer
@@ -91,7 +91,7 @@ class Controls:
                             ui.label('Cartesian').classes('mb-[-1em] mt-[-0.4em] text-white')
                             async def copyToClipboardCartesian():
                                 """copies the cartesian position of the robot to the clipboard"""
-                                content = f'[{", ".join([f"{x:.4f}" for x in np.concatenate(TransformationMatix.fromPose(self.server.robotPose).decomposeNumpy())])}]'
+                                content = f'[{", ".join([f"{x:.4f}" for x in np.concatenate(TransformationMatrix.fromPose(self.server.robotPose).decomposeNumpy())])}]'
                                 logger.info(f'copied {content} to clipboard')
                                 ui.clipboard.write(content)
                             ui.button('', on_click=copyToClipboardCartesian, icon='content_copy').props('dense').style('font-size:0.85em;justify-content:right;').classes(f'my-[-1em]').tooltip('Copies the cartesian values as x,y,z and a Quaternion to clipboard')     # Copy to clipboard button

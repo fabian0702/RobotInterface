@@ -2,14 +2,14 @@ from urllib.parse import quote
 
 from fastapi.responses import RedirectResponse
 
-from nicegui import ui, app
+from nicegui import ui
 
 from core.constants import LOG_LEVEL, JSON_PATH, ROBOT_SELECTION_DATA, CLIENT_PORT
 from core.model import RobotModel
 from core.server import RobotServer
 from core.controls import Controls
 
-from python_main.ch.bfh.roboticsLab.util.Logger import Logger
+from Python.ch.bfh.roboticsLab.util.Logger import Logger
 logger = Logger('RobotInterface', LOG_LEVEL).getInstance()
 
 @ui.page('/robot')

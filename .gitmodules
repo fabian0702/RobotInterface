@@ -1,0 +1,3 @@
+[submodule "Python"]
+	path = Python
+	url = git@gitlab.ti.bfh.ch:roboticsLab/Frameworks/Python.git

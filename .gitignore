@@ -11,3 +11,4 @@ python_main/ch/bfh/roboticsLab/robot/RobotSimulator copy.py
 .vscode/
 /core/kinematics/
 /resources/environment/__pycache__/
+venv/
